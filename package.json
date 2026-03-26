@@ -1,0 +1,85 @@
+{
+  "name": "@zan_team/x402",
+  "version": "1.1.0",
+  "description": "TypeScript SDK for x402 Gateway Platform — blockchain RPC & Web2 API access with on-chain USDC payments",
+  "main": "./dist/cjs/index.js",
+  "module": "./dist/esm/index.js",
+  "types": "./dist/types/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/esm/index.js",
+      "require": "./dist/cjs/index.js",
+      "types": "./dist/types/index.d.ts"
+    },
+    "./core": {
+      "import": "./dist/esm/client.js",
+      "require": "./dist/cjs/client.js",
+      "types": "./dist/types/client.d.ts"
+    },
+    "./auth": {
+      "import": "./dist/esm/modules/auth.js",
+      "require": "./dist/cjs/modules/auth.js",
+      "types": "./dist/types/modules/auth.d.ts"
+    },
+    "./credits": {
+      "import": "./dist/esm/modules/credits.js",
+      "require": "./dist/cjs/modules/credits.js",
+      "types": "./dist/types/modules/credits.d.ts"
+    },
+    "./rpc": {
+      "import": "./dist/esm/modules/rpc.js",
+      "require": "./dist/cjs/modules/rpc.js",
+      "types": "./dist/types/modules/rpc.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "npm run build:esm && npm run build:cjs",
+    "build:esm": "tsc -p tsconfig.esm.json",
+    "build:cjs": "tsc -p tsconfig.cjs.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "lint": "eslint src/",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "npm run clean && npm run build"
+  },
+  "dependencies": {
+    "siwe": "^2.3.2",
+    "viem": "^2.21.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.0",
+    "vitest": "^2.1.0",
+    "eslint": "^9.15.0"
+  },
+  "peerDependencies": {
+    "viem": ">=2.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "x402",
+    "web3",
+    "rpc",
+    "gateway",
+    "usdc",
+    "payment",
+    "blockchain",
+    "ethereum",
+    "solana",
+    "sdk"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://code.alipay.com/chain-lab/zanx402-sdk"
+  },
+  "author": "WebT"
+}
