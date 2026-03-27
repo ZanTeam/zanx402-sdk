@@ -1,8 +1,0 @@
-src/
-tests/
-tsconfig*.json
-.eslintrc*
-.gitignore
-vitest.config.ts
-node_modules/
-coverage/
