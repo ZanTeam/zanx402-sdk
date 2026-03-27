@@ -70,6 +70,15 @@ export class AuthModule {
     this.http.setToken(undefined);
   }
 
+  getChainType(): ChainType {
+    return this.chainType;
+  }
+
+  /** @internal CreditsModule: Solana x402 auto-settlement */
+  getSvmPrivateKey(): string | undefined {
+    return this.svmPrivateKey;
+  }
+
   // ── EVM (SIWE) ──────────────────────────────────────────────
 
   private async authenticateEvm(): Promise<AuthSuccess> {

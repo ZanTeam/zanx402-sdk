@@ -44,19 +44,26 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tests/tsconfig.json",
     "lint": "eslint src/",
     "clean": "rm -rf dist",
     "prepublishOnly": "npm run clean && npm run build"
   },
   "dependencies": {
     "siwe": "^2.3.2",
-    "viem": "^2.21.0"
+    "viem": ">=2.0.0"
+  },
+  "optionalDependencies": {
+    "@solana/spl-token": "^0.4.9",
+    "@solana/web3.js": "^1.98.0",
+    "bs58": "^6.0.0",
+    "tweetnacl": "^1.0.3"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
+    "eslint": "^9.15.0",
     "typescript": "^5.7.0",
-    "vitest": "^2.1.0",
-    "eslint": "^9.15.0"
+    "vitest": "^2.1.0"
   },
   "peerDependencies": {
     "viem": ">=2.0.0"

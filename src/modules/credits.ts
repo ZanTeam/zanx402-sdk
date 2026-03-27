@@ -1,18 +1,55 @@
-import type { BalanceResponse, PurchaseSuccess, UsageResponse, UsageQueryParams, PaymentStatus } from '../types/credits.js';
+import type {
+  BalanceResponse,
+  PurchaseSuccess,
+  UsageResponse,
+  UsageQueryParams,
+  PaymentStatus,
+  PaymentRequiredPayload,
+} from '../types/credits.js';
 import type { BundleType } from '../types/common.js';
 import { HttpClient } from '../utils/http.js';
 import { ENDPOINTS, HEADERS } from '../constants.js';
 import { InsufficientCreditsError, PaymentRejectedError, X402Error } from '../errors/index.js';
-import { parsePaymentRequired, encodePaymentSignature, buildPaymentSignaturePayload } from '../utils/x402.js';
+import { parsePaymentRequired, encodePaymentSignature } from '../utils/x402.js';
+import { buildSolanaX402PaymentPayload, pickSolanaPaymentOption } from '../utils/solana-x402-payment.js';
 import type { AuthModule } from './auth.js';
 
 export class CreditsModule {
   private readonly http: HttpClient;
   private readonly auth: AuthModule;
+  private readonly paymentNetwork?: string;
+  private readonly solanaRpcUrl?: string;
 
-  constructor(http: HttpClient, auth: AuthModule) {
+  constructor(
+    http: HttpClient,
+    auth: AuthModule,
+    opts?: { paymentNetwork?: string; solanaRpcUrl?: string },
+  ) {
     this.http = http;
     this.auth = auth;
+    this.paymentNetwork = opts?.paymentNetwork;
+    this.solanaRpcUrl = opts?.solanaRpcUrl;
+  }
+
+  /**
+   * When 402 + SVM key present: build SPL USDC tx, sign, complete purchase via facilitator.
+   */
+  private async tryCompleteSolanaPurchase(
+    path: string,
+    paymentRequired: PaymentRequiredPayload,
+  ): Promise<PurchaseSuccess | null> {
+    if (this.auth.getChainType() !== 'SVM') return null;
+    const svm = this.auth.getSvmPrivateKey();
+    if (!svm) return null;
+    const option = pickSolanaPaymentOption(paymentRequired.accepts, this.paymentNetwork);
+    if (!option) return null;
+    const payload = await buildSolanaX402PaymentPayload({
+      svmSecretKeyBase58: svm,
+      option,
+      solanaRpcUrl: this.solanaRpcUrl,
+    });
+    const header = encodePaymentSignature(payload);
+    return this.completePurchase(path, header);
   }
 
   /** Get current credit balance */
@@ -59,6 +96,9 @@ export class CreditsModule {
     if (!paymentRequired || paymentRequired.accepts.length === 0) {
       throw new PaymentRejectedError('402 received but no payment options available');
     }
+
+    const completed = await this.tryCompleteSolanaPurchase(path, paymentRequired);
+    if (completed) return completed;
 
     return {
       ...initResponse.data,

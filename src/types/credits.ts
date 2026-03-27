@@ -57,9 +57,13 @@ export interface PaymentRequiredPayload {
 
 export interface PaymentOption {
   network: string;
+  scheme?: string;
   chainId?: number;
-  tokenAddress: string;
-  recipient: string;
+  /** Gateway may send `asset` instead of tokenAddress */
+  tokenAddress?: string;
+  recipient?: string;
+  asset?: string;
+  payTo?: string;
   amount: string;
   description?: string;
 }

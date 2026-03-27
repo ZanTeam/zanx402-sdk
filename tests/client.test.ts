@@ -1,5 +1,6 @@
 import { X402Client } from '../src/client.js';
 import { InsufficientCreditsError } from '../src/errors/index.js';
+import type { BalanceResponse } from '../src/types/credits.js';
 
 const mockFetch = vi.fn();
 
@@ -72,7 +73,7 @@ describe('X402Client', () => {
 
   it('getBalance() delegates to credits.getBalance', async () => {
     const client = new X402Client(baseConfig);
-    const expectedData = {
+    const expectedData: BalanceResponse = {
       wallet: '0x123',
       balance: 100,
       totalPurchased: 200,

@@ -110,7 +110,8 @@ describe('x402 utilities', () => {
 
       expect(result.network).toBe('base-sepolia');
       expect(result.payload).toBeDefined();
-      expect(result.payload.authorization).toBeDefined();
+      const payload = result.payload as { authorization?: unknown };
+      expect(payload.authorization).toBeDefined();
     });
   });
 });

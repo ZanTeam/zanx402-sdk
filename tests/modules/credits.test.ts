@@ -2,10 +2,13 @@ import { CreditsModule } from '../../src/modules/credits.js';
 import { HttpClient } from '../../src/utils/http.js';
 import { ENDPOINTS, HEADERS } from '../../src/constants.js';
 import type { AuthModule } from '../../src/modules/auth.js';
+import type { BalanceResponse } from '../../src/types/credits.js';
 
 describe('CreditsModule', () => {
   const createMockAuth = () => ({
     ensureAuthenticated: vi.fn().mockResolvedValue(undefined),
+    getChainType: vi.fn().mockReturnValue('EVM'),
+    getSvmPrivateKey: vi.fn().mockReturnValue(undefined),
   });
 
   const createMockHttp = () => ({
@@ -22,31 +25,37 @@ describe('CreditsModule', () => {
   });
 
   it('getBalance() returns balance data', async () => {
-    const expectedData = { wallet: '0x123', balance: 100, totalPurchased: 200, totalConsumed: 100, tier: 'standard' };
-    const mockHttp = createMockHttp() as unknown as HttpClient;
+    const expectedData: BalanceResponse = {
+      wallet: '0x123',
+      balance: 100,
+      totalPurchased: 200,
+      totalConsumed: 100,
+      tier: 'standard',
+    };
+    const mockHttp = createMockHttp();
     const mockAuth = createMockAuth() as unknown as AuthModule;
-    mockHttp.get.mockResolvedValue({ data: expectedData, status: 200, headers: new Headers() });
+    vi.mocked(mockHttp.get).mockResolvedValue({ data: expectedData, status: 200, headers: new Headers() });
 
-    const credits = new CreditsModule(mockHttp, mockAuth);
+    const credits = new CreditsModule(mockHttp as unknown as HttpClient, mockAuth);
     const result = await credits.getBalance();
 
-    expect(mockHttp.get).toHaveBeenCalledWith(ENDPOINTS.BALANCE);
+    expect(vi.mocked(mockHttp.get)).toHaveBeenCalledWith(ENDPOINTS.BALANCE);
     expect(result).toEqual(expectedData);
   });
 
   it('getBalance() calls ensureAuthenticated', async () => {
-    const mockHttp = createMockHttp() as unknown as HttpClient;
-    const mockAuth = createMockAuth() as unknown as AuthModule;
-    mockHttp.get.mockResolvedValue({
+    const mockHttp = createMockHttp();
+    const mockAuth = createMockAuth();
+    vi.mocked(mockHttp.get).mockResolvedValue({
       data: { wallet: '0x', balance: 0, totalPurchased: 0, totalConsumed: 0, tier: 'trial' },
       status: 200,
       headers: new Headers(),
     });
 
-    const credits = new CreditsModule(mockHttp, mockAuth);
+    const credits = new CreditsModule(mockHttp as unknown as HttpClient, mockAuth as unknown as AuthModule);
     await credits.getBalance();
 
-    expect(mockAuth.ensureAuthenticated).toHaveBeenCalled();
+    expect(vi.mocked(mockAuth.ensureAuthenticated)).toHaveBeenCalled();
   });
 
   it('purchaseCredits() with paymentSignature calls completePurchase', async () => {
@@ -60,15 +69,15 @@ describe('CreditsModule', () => {
       txHash: '0xabc',
       paymentNetwork: 'base',
     };
-    const mockHttp = createMockHttp() as unknown as HttpClient;
+    const mockHttp = createMockHttp();
     const mockAuth = createMockAuth() as unknown as AuthModule;
-    mockHttp.post.mockResolvedValue({ data: expectedData, status: 200, headers: new Headers() });
+    vi.mocked(mockHttp.post).mockResolvedValue({ data: expectedData, status: 200, headers: new Headers() });
 
-    const credits = new CreditsModule(mockHttp, mockAuth);
+    const credits = new CreditsModule(mockHttp as unknown as HttpClient, mockAuth);
     const result = await credits.purchaseCredits('default', 'payment-sig-123');
 
     const expectedPath = `${ENDPOINTS.PURCHASE}/default`;
-    expect(mockHttp.post).toHaveBeenCalledWith(
+    expect(vi.mocked(mockHttp.post)).toHaveBeenCalledWith(
       expectedPath,
       undefined,
       expect.objectContaining({
@@ -96,38 +105,40 @@ describe('CreditsModule', () => {
       Buffer.from(JSON.stringify(paymentPayload), 'utf-8').toString('base64'),
     );
 
-    const mockHttp = createMockHttp() as unknown as HttpClient;
+    const mockHttp = createMockHttp();
     const mockAuth = createMockAuth() as unknown as AuthModule;
-    mockHttp.post.mockResolvedValue({
+    vi.mocked(mockHttp.post).mockResolvedValue({
       data: { message: 'Payment required' },
       status: 402,
       headers,
     });
 
-    const credits = new CreditsModule(mockHttp, mockAuth);
+    const credits = new CreditsModule(mockHttp as unknown as HttpClient, mockAuth);
     const result = await credits.purchaseCredits('default');
 
-    expect(mockHttp.post).toHaveBeenCalledWith(`${ENDPOINTS.PURCHASE}/default`);
+    expect(vi.mocked(mockHttp.post)).toHaveBeenCalledWith(`${ENDPOINTS.PURCHASE}/default`);
     expect(result).toHaveProperty('_paymentRequired');
-    expect((result as { _paymentRequired: { accepts: unknown[] } })._paymentRequired.accepts).toHaveLength(1);
+    expect(
+      (result as unknown as { _paymentRequired: { accepts: unknown[] } })._paymentRequired.accepts,
+    ).toHaveLength(1);
   });
 
   it('getUsage() builds correct query string', async () => {
     const expectedData = { records: [], total: 0 };
-    const mockHttp = createMockHttp() as unknown as HttpClient;
+    const mockHttp = createMockHttp();
     const mockAuth = createMockAuth() as unknown as AuthModule;
-    mockHttp.buildQueryString.mockReturnValue('?limit=10&offset=0&provider=p1');
-    mockHttp.get.mockResolvedValue({ data: expectedData, status: 200, headers: new Headers() });
+    vi.mocked(mockHttp.buildQueryString).mockReturnValue('?limit=10&offset=0&provider=p1');
+    vi.mocked(mockHttp.get).mockResolvedValue({ data: expectedData, status: 200, headers: new Headers() });
 
-    const credits = new CreditsModule(mockHttp, mockAuth);
+    const credits = new CreditsModule(mockHttp as unknown as HttpClient, mockAuth);
     await credits.getUsage({ limit: 10, offset: 0, provider: 'p1' });
 
-    expect(mockHttp.buildQueryString).toHaveBeenCalledWith({
+    expect(vi.mocked(mockHttp.buildQueryString)).toHaveBeenCalledWith({
       limit: 10,
       offset: 0,
       provider: 'p1',
     });
-    expect(mockHttp.get).toHaveBeenCalledWith(`${ENDPOINTS.USAGE}?limit=10&offset=0&provider=p1`);
+    expect(vi.mocked(mockHttp.get)).toHaveBeenCalledWith(`${ENDPOINTS.USAGE}?limit=10&offset=0&provider=p1`);
   });
 
   it('getPaymentStatus() sends correct path', async () => {
@@ -139,15 +150,15 @@ describe('CreditsModule', () => {
       paymentNetwork: 'base',
       settledAt: '2024-01-01T00:00:00Z',
     };
-    const mockHttp = createMockHttp() as unknown as HttpClient;
+    const mockHttp = createMockHttp();
     const mockAuth = createMockAuth() as unknown as AuthModule;
-    mockHttp.get.mockResolvedValue({ data: expectedData, status: 200, headers: new Headers() });
+    vi.mocked(mockHttp.get).mockResolvedValue({ data: expectedData, status: 200, headers: new Headers() });
 
-    const credits = new CreditsModule(mockHttp, mockAuth);
+    const credits = new CreditsModule(mockHttp as unknown as HttpClient, mockAuth);
     const result = await credits.getPaymentStatus('idempotency-key-123');
 
     const expectedPath = `${ENDPOINTS.PAYMENT_STATUS}/idempotency-key-123`;
-    expect(mockHttp.get).toHaveBeenCalledWith(expectedPath);
+    expect(vi.mocked(mockHttp.get)).toHaveBeenCalledWith(expectedPath);
     expect(result).toEqual(expectedData);
   });
 });

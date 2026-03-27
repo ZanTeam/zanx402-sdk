@@ -26,6 +26,11 @@ export {
   encodePaymentSignature,
   buildPaymentSignaturePayload,
 } from './utils/x402.js';
+export {
+  buildSolanaX402PaymentPayload,
+  pickSolanaPaymentOption,
+  SOLANA_X402_FEE_PAYER,
+} from './utils/solana-x402-payment.js';
 
 export type * from './types/index.js';
 

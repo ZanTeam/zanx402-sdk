@@ -25,11 +25,13 @@ export interface X402ClientConfig {
 
   // ── Payment ────────────────────────────────────────────────
   /**
-   * CAIP-2 payment network identifier (e.g. "eip155:8453" for Base).
-   * The payment network is decoupled from the chain you query — you can
-   * pay on Base and query Ethereum or Solana.
+   * CAIP-2 payment network identifier (e.g. "eip155:8453" for Base,
+   * or "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1" for Solana Devnet).
+   * Used to pick the matching entry in PAYMENT-REQUIRED when auto-purchasing.
    */
   paymentNetwork?: string;
+  /** Solana RPC URL for building USDC payment txs (default maps from payment network). */
+  solanaRpcUrl?: string;
   /** Auto-purchase credits when receiving 402 */
   autoPayment?: boolean;
   /** Default bundle for auto-purchase */

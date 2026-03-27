@@ -88,7 +88,10 @@ export class X402Client {
       config.svmPrivateKey,
     );
 
-    this.credits = new CreditsModule(this.http, this.auth);
+    this.credits = new CreditsModule(this.http, this.auth, {
+      paymentNetwork: config.paymentNetwork,
+      solanaRpcUrl: config.solanaRpcUrl,
+    });
     this.rpc = new RpcModule(this.http, this.auth);
     this.discovery = new DiscoveryModule(this.http);
   }
