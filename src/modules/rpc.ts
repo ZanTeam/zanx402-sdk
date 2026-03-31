@@ -1,6 +1,6 @@
 import type { JsonRpcRequest, JsonRpcResponse, ProviderCallOptions } from '../types/provider.js';
 import type { InsufficientCreditsBody } from '../types/credits.js';
-import { HttpClient } from '../utils/http.js';
+import { HttpClient, extractTraceId } from '../utils/http.js';
 import { ENDPOINTS } from '../constants.js';
 import {
   InsufficientCreditsError,
@@ -52,13 +52,17 @@ export class RpcModule {
       params,
     };
 
-    const { data, status } = await this.http.post<JsonRpcResponse<T> | Record<string, unknown>>(
+    const { data, status, headers } = await this.http.post<JsonRpcResponse<T> | Record<string, unknown>>(
       path,
       body,
     );
 
-    this.handleErrorStatus(status, path, data);
-    return data as JsonRpcResponse<T>;
+    const traceId = extractTraceId(headers, data);
+    this.handleErrorStatus(status, path, data, traceId);
+
+    const response = data as JsonRpcResponse<T>;
+    if (traceId) response.traceId = traceId;
+    return response;
   }
 
   /**
@@ -79,13 +83,19 @@ export class RpcModule {
       params: c.params ?? [],
     }));
 
-    const { data, status } = await this.http.post<Array<JsonRpcResponse<T>> | Record<string, unknown>>(
+    const { data, status, headers } = await this.http.post<Array<JsonRpcResponse<T>> | Record<string, unknown>>(
       path,
       body,
     );
 
-    this.handleErrorStatus(status, path, data);
-    return data as Array<JsonRpcResponse<T>>;
+    const traceId = extractTraceId(headers, data);
+    this.handleErrorStatus(status, path, data, traceId);
+
+    const responses = data as Array<JsonRpcResponse<T>>;
+    if (traceId) {
+      for (const r of responses) r.traceId = traceId;
+    }
+    return responses;
   }
 
   /**
@@ -104,18 +114,19 @@ export class RpcModule {
     }
     await this.auth.ensureAuthenticated();
 
-    const { data, status } = await this.http.request<T | Record<string, unknown>>(path, {
+    const { data, status, headers } = await this.http.request<T | Record<string, unknown>>(path, {
       method: options.method ?? 'POST',
       headers: options.headers,
       body: options.body,
       timeout: options.timeout,
     });
 
-    this.handleErrorStatus(status, path, data);
+    const traceId = extractTraceId(headers, data);
+    this.handleErrorStatus(status, path, data, traceId);
     return data as T;
   }
 
-  private handleErrorStatus(status: number, path: string, data: unknown): void {
+  private handleErrorStatus(status: number, path: string, data: unknown, traceId?: string): void {
     if (status >= 200 && status < 300) return;
 
     const body = data as Record<string, unknown>;
@@ -129,16 +140,17 @@ export class RpcModule {
           creditsBody.required ?? 0,
           creditsBody.balance ?? 0,
           creditsBody.purchaseUrl,
+          traceId,
         );
       }
       case 403:
-        throw new MethodNotAllowedError(message);
+        throw new MethodNotAllowedError(message, traceId);
       case 404:
-        throw new ProviderNotFoundError(path);
+        throw new ProviderNotFoundError(path, traceId);
       case 504:
-        throw new UpstreamError(message, status, (body?.creditRefunded as boolean) ?? false);
+        throw new UpstreamError(message, status, (body?.creditRefunded as boolean) ?? false, traceId);
       default:
-        throw new X402Error(message, error, status, body);
+        throw new X402Error(message, error, status, body, traceId);
     }
   }
 }

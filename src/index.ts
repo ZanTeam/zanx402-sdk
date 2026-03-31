@@ -18,7 +18,7 @@ export {
   NetworkError,
 } from './errors/index.js';
 
-export { HttpClient, assertShape } from './utils/http.js';
+export { HttpClient, assertShape, extractTraceId } from './utils/http.js';
 export { buildSiweMessage, extractDomain, generateNonce } from './utils/siwe.js';
 export { buildSiwsMessage, signSolanaMessage } from './utils/siws.js';
 export {
@@ -31,6 +31,10 @@ export {
   pickSolanaPaymentOption,
   SOLANA_X402_FEE_PAYER,
 } from './utils/solana-x402-payment.js';
+export {
+  buildEvmX402PaymentPayload,
+  pickEvmPaymentOption,
+} from './utils/evm-x402-payment.js';
 export {
   extractSettlementSession,
   withBearerAuth,

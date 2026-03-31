@@ -23,6 +23,7 @@ export const HEADERS = {
   PAYMENT_SIGNATURE: 'PAYMENT-SIGNATURE',
   PAYMENT_REQUIRED: 'PAYMENT-REQUIRED',
   PAYMENT_RESPONSE: 'PAYMENT-RESPONSE',
+  TRACE_ID: 'x-trace-id',
 } as const;
 
 export const DEFAULT_STATEMENT = 'Sign in to x402 Gateway Platform';

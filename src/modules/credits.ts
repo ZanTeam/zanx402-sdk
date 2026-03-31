@@ -7,11 +7,12 @@ import type {
   PaymentRequiredPayload,
 } from '../types/credits.js';
 import type { BundleType } from '../types/common.js';
-import { HttpClient, assertShape } from '../utils/http.js';
+import { HttpClient, assertShape, extractTraceId } from '../utils/http.js';
 import { ENDPOINTS, HEADERS } from '../constants.js';
 import { InsufficientCreditsError, PaymentRejectedError, X402Error } from '../errors/index.js';
 import { parsePaymentRequired, encodePaymentSignature } from '../utils/x402.js';
 import { buildSolanaX402PaymentPayload, pickSolanaPaymentOption } from '../utils/solana-x402-payment.js';
+import { buildEvmX402PaymentPayload, pickEvmPaymentOption } from '../utils/evm-x402-payment.js';
 import type { AuthModule } from './auth.js';
 
 export class CreditsModule {
@@ -58,12 +59,39 @@ export class CreditsModule {
     return this.completePurchase(path, header);
   }
 
+  /**
+   * When 402 + EVM credentials present: sign EIP-3009 transferWithAuthorization, complete purchase.
+   * Supports both raw private key and viem WalletClient.
+   */
+  private async tryCompleteEvmPurchase(
+    path: string,
+    paymentRequired: PaymentRequiredPayload,
+  ): Promise<PurchaseSuccess | null> {
+    if (this.auth.getChainType() !== 'EVM') return null;
+
+    const option = pickEvmPaymentOption(paymentRequired.accepts, this.paymentNetwork);
+    if (!option) return null;
+
+    const privateKey = this.auth._borrowEvmPrivateKey();
+    const walletClient = this.auth._getEvmWallet();
+    if (!privateKey && !walletClient) return null;
+
+    const payload = await buildEvmX402PaymentPayload({
+      privateKey,
+      walletClient,
+      option,
+    });
+    const header = encodePaymentSignature(payload);
+    return this.completePurchase(path, header);
+  }
+
   /** Get current credit balance */
   async getBalance(): Promise<BalanceResponse> {
     await this.auth.ensureAuthenticated();
-    const { data, status } = await this.http.get<BalanceResponse>(ENDPOINTS.BALANCE);
+    const { data, status, headers } = await this.http.get<BalanceResponse>(ENDPOINTS.BALANCE);
     if (status !== 200) {
-      throw new X402Error(`Failed to get balance: status ${status}`, 'BALANCE_ERROR', status, data);
+      const traceId = extractTraceId(headers, data);
+      throw new X402Error(`Failed to get balance: status ${status}`, 'BALANCE_ERROR', status, data, traceId);
     }
     assertShape<BalanceResponse>(data, ['wallet', 'balance'], 'balance');
     return data;
@@ -85,6 +113,7 @@ export class CreditsModule {
     }
 
     const initResponse = await this.http.post<PurchaseSuccess>(path);
+    const initTraceId = extractTraceId(initResponse.headers, initResponse.data);
 
     if (initResponse.status === 200) {
       return initResponse.data;
@@ -96,6 +125,7 @@ export class CreditsModule {
         'PURCHASE_ERROR',
         initResponse.status,
         initResponse.data,
+        initTraceId,
       );
     }
 
@@ -104,8 +134,11 @@ export class CreditsModule {
       throw new PaymentRejectedError('402 received but no payment options available');
     }
 
-    const completed = await this.tryCompleteSolanaPurchase(path, paymentRequired);
-    if (completed) return completed;
+    const solCompleted = await this.tryCompleteSolanaPurchase(path, paymentRequired);
+    if (solCompleted) return solCompleted;
+
+    const evmCompleted = await this.tryCompleteEvmPurchase(path, paymentRequired);
+    if (evmCompleted) return evmCompleted;
 
     return {
       ...initResponse.data,
@@ -118,14 +151,18 @@ export class CreditsModule {
    * Typically called after the wallet has signed the EIP-3009 authorization.
    */
   async completePurchase(path: string, paymentSignature: string): Promise<PurchaseSuccess> {
-    const { data, status } = await this.http.post<PurchaseSuccess>(path, undefined, {
+    const { data, status, headers } = await this.http.post<PurchaseSuccess>(path, undefined, {
       headers: { [HEADERS.PAYMENT_SIGNATURE]: paymentSignature },
     });
+
+    const traceId = extractTraceId(headers, data);
 
     if (status !== 200) {
       const body = data as unknown as Record<string, unknown> | undefined;
       const reason = (body?.error as string) ?? (body?.message as string) ?? `status ${status}`;
-      throw new PaymentRejectedError(`Payment rejected: ${reason}`);
+      const detailStr = (body?.details as string) ?? (body?.reason as string) ?? '';
+      const hint = detailStr ? ` (${detailStr})` : '';
+      throw new PaymentRejectedError(`Payment rejected: ${reason}${hint}`, undefined, traceId, body);
     }
 
     assertShape<PurchaseSuccess>(data, ['success', 'bundle', 'balance'], 'purchase');
@@ -140,9 +177,10 @@ export class CreditsModule {
       offset: params.offset,
       provider: params.provider,
     });
-    const { data, status } = await this.http.get<UsageResponse>(`${ENDPOINTS.USAGE}${qs}`);
+    const { data, status, headers } = await this.http.get<UsageResponse>(`${ENDPOINTS.USAGE}${qs}`);
     if (status !== 200) {
-      throw new X402Error(`Failed to get usage: status ${status}`, 'USAGE_ERROR', status, data);
+      const traceId = extractTraceId(headers, data);
+      throw new X402Error(`Failed to get usage: status ${status}`, 'USAGE_ERROR', status, data, traceId);
     }
     return data;
   }
@@ -150,11 +188,12 @@ export class CreditsModule {
   /** Query a specific payment status by idempotency key */
   async getPaymentStatus(idempotencyKey: string): Promise<PaymentStatus> {
     await this.auth.ensureAuthenticated();
-    const { data, status } = await this.http.get<PaymentStatus>(
+    const { data, status, headers } = await this.http.get<PaymentStatus>(
       `${ENDPOINTS.PAYMENT_STATUS}/${encodeURIComponent(idempotencyKey)}`,
     );
     if (status !== 200) {
-      throw new X402Error(`Failed to get payment status: ${status}`, 'PAYMENT_STATUS_ERROR', status, data);
+      const traceId = extractTraceId(headers, data);
+      throw new X402Error(`Failed to get payment status: ${status}`, 'PAYMENT_STATUS_ERROR', status, data, traceId);
     }
     return data;
   }

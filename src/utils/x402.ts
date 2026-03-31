@@ -31,6 +31,9 @@ export function encodePaymentSignature(payload: Record<string, unknown>): string
 
 /**
  * Build the x402 payment signature payload for EIP-3009 transferWithAuthorization.
+ *
+ * The gateway expects a **flat** structure where `payload` is the raw EIP-712
+ * signature hex string, and `authorization` / `domain` sit at the top level.
  */
 export interface TransferAuthParams {
   from: string;
@@ -42,23 +45,33 @@ export interface TransferAuthParams {
   signature: string;
   network: string;
   chainId?: number;
+  tokenAddress?: string;
 }
 
 export function buildPaymentSignaturePayload(params: TransferAuthParams): Record<string, unknown> {
-  return {
+  const result: Record<string, unknown> = {
     x402Version: 2,
     scheme: 'exact',
     network: params.network,
-    payload: {
-      signature: params.signature,
-      authorization: {
-        from: params.from,
-        to: params.to,
-        value: params.value,
-        validAfter: params.validAfter,
-        validBefore: params.validBefore,
-        nonce: params.nonce,
-      },
+    payload: params.signature,
+    authorization: {
+      from: params.from,
+      to: params.to,
+      value: params.value,
+      validAfter: params.validAfter,
+      validBefore: params.validBefore,
+      nonce: params.nonce,
     },
   };
+
+  if (params.chainId != null && params.tokenAddress) {
+    result.domain = {
+      name: 'USD Coin',
+      version: '2',
+      chainId: params.chainId,
+      verifyingContract: params.tokenAddress,
+    };
+  }
+
+  return result;
 }

@@ -98,6 +98,16 @@ export class AuthModule {
     return this.svmSigner;
   }
 
+  /** @internal CreditsModule only — returns EVM hex private key for payment signing. */
+  _borrowEvmPrivateKey(): `0x${string}` | undefined {
+    return this.privateKey;
+  }
+
+  /** @internal CreditsModule only — returns WalletClient for EVM payment signing. */
+  _getEvmWallet(): WalletClient<Transport, Chain, Account> | undefined {
+    return this.wallet;
+  }
+
   /** Inject a session token from an external source (e.g. settlement response). */
   injectSession(token: string, expiresAt: number, wallet?: string): void {
     this.session = {

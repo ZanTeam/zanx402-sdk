@@ -2,6 +2,18 @@ import { HEADERS, DEFAULT_TIMEOUT } from '../constants.js';
 import { NetworkError, X402Error } from '../errors/index.js';
 
 /**
+ * Extract traceId from response headers (x-trace-id) or response body.
+ */
+export function extractTraceId(headers: Headers, body?: unknown): string | undefined {
+  const fromHeader = headers.get(HEADERS.TRACE_ID);
+  if (fromHeader) return fromHeader;
+  if (body && typeof body === 'object' && 'traceId' in (body as Record<string, unknown>)) {
+    return String((body as Record<string, unknown>).traceId);
+  }
+  return undefined;
+}
+
+/**
  * Lightweight runtime check that `obj` has every key in `keys` with a non-undefined value.
  * Used as a minimal guard against malformed gateway responses.
  */

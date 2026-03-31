@@ -1,6 +1,7 @@
 {
   "name": "@zan_team/x402",
   "version": "1.1.0",
+  "type": "module",
   "description": "TypeScript SDK for the x402 gateway: unified JSON-RPC and HTTP APIs with on-chain USDC settlement; typed modules and 402 automation for programmatic clients and AI agents",
   "main": "./dist/cjs/index.js",
   "module": "./dist/esm/index.js",
@@ -39,9 +40,10 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "npm run build:esm && npm run build:cjs",
+    "build": "npm run build:esm && npm run build:cjs && npm run build:cjs-pkg",
     "build:esm": "tsc -p tsconfig.esm.json",
     "build:cjs": "tsc -p tsconfig.cjs.json",
+    "build:cjs-pkg": "echo '{\"type\":\"commonjs\"}' > dist/cjs/package.json",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",

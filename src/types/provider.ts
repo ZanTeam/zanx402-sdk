@@ -10,6 +10,8 @@ export interface JsonRpcResponse<T = unknown> {
   id: number | string;
   result?: T;
   error?: JsonRpcError;
+  /** Gateway trace identifier — propagated from response header `x-trace-id`. */
+  traceId?: string;
 }
 
 export interface JsonRpcError {
