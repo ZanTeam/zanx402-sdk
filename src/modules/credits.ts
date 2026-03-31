@@ -32,19 +32,25 @@ export class CreditsModule {
   }
 
   /**
-   * When 402 + SVM key present: build SPL USDC tx, sign, complete purchase via facilitator.
+   * When 402 + SVM credentials present: build SPL USDC tx, sign, complete purchase.
+   * Supports both raw private key and abstract SvmSigner.
    */
   private async tryCompleteSolanaPurchase(
     path: string,
     paymentRequired: PaymentRequiredPayload,
   ): Promise<PurchaseSuccess | null> {
     if (this.auth.getChainType() !== 'SVM') return null;
-    const svm = this.auth._borrowSvmPrivateKey();
-    if (!svm) return null;
+
     const option = pickSolanaPaymentOption(paymentRequired.accepts, this.paymentNetwork);
     if (!option) return null;
+
+    const svmSigner = this.auth._getSvmSigner();
+    const svmKey = this.auth._borrowSvmPrivateKey();
+    if (!svmSigner && !svmKey) return null;
+
     const payload = await buildSolanaX402PaymentPayload({
-      svmSecretKeyBase58: svm,
+      svmSecretKeyBase58: svmKey,
+      svmSigner,
       option,
       solanaRpcUrl: this.solanaRpcUrl,
     });

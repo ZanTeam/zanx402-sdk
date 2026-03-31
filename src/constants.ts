@@ -22,7 +22,10 @@ export const HEADERS = {
   CONTENT_TYPE: 'Content-Type',
   PAYMENT_SIGNATURE: 'PAYMENT-SIGNATURE',
   PAYMENT_REQUIRED: 'PAYMENT-REQUIRED',
+  PAYMENT_RESPONSE: 'PAYMENT-RESPONSE',
 } as const;
+
+export const DEFAULT_STATEMENT = 'Sign in to x402 Gateway Platform';
 
 /** JWT refresh buffer — re-authenticate 60s before expiry */
 export const JWT_REFRESH_BUFFER_MS = 60_000;

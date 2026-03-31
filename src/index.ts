@@ -31,7 +31,19 @@ export {
   pickSolanaPaymentOption,
   SOLANA_X402_FEE_PAYER,
 } from './utils/solana-x402-payment.js';
+export {
+  extractSettlementSession,
+  withBearerAuth,
+  withSessionExtraction,
+} from './utils/fetch-wrappers.js';
 
 export type * from './types/index.js';
 
-export { ENDPOINTS, HEADERS, DEFAULT_TIMEOUT, DEFAULT_GATEWAY_URL, SIWE_EXPIRY_MS } from './constants.js';
+export {
+  ENDPOINTS,
+  HEADERS,
+  DEFAULT_TIMEOUT,
+  DEFAULT_GATEWAY_URL,
+  DEFAULT_STATEMENT,
+  SIWE_EXPIRY_MS,
+} from './constants.js';

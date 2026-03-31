@@ -11,6 +11,7 @@ import {
 } from '@solana/spl-token';
 import bs58 from 'bs58';
 import type { PaymentOption } from '../types/credits.js';
+import type { SvmSigner } from '../types/common.js';
 import { NetworkError, PaymentRejectedError } from '../errors/index.js';
 
 /** Dexter public facilitator fee payer (must match gateway / x402.dexter.cash) */
@@ -95,18 +96,22 @@ export function pickSolanaPaymentOption(
 }
 
 export interface BuildSolanaX402PaymentPayloadParams {
-  svmSecretKeyBase58: string;
+  /** Raw Base58 secret key — used when svmSigner is not provided. */
+  svmSecretKeyBase58?: string;
+  /** Abstract signer — takes precedence over svmSecretKeyBase58. */
+  svmSigner?: SvmSigner;
   option: PaymentOption & Record<string, unknown>;
   solanaRpcUrl?: string;
 }
 
 /**
  * Build the JSON object to pass to `encodePaymentSignature()` for Solana settlement.
+ * Supports both raw secret key and abstract SvmSigner.
  */
 export async function buildSolanaX402PaymentPayload(
   params: BuildSolanaX402PaymentPayloadParams,
 ): Promise<Record<string, unknown>> {
-  const { svmSecretKeyBase58, option, solanaRpcUrl } = params;
+  const { svmSecretKeyBase58, svmSigner, option, solanaRpcUrl } = params;
   const n = normalizeOption(option);
 
   const rpcUrls = rpcCandidatesForNetwork(n.network, solanaRpcUrl);
@@ -115,19 +120,42 @@ export async function buildSolanaX402PaymentPayload(
   const mint = new PublicKey(n.asset);
   const payToOwner = new PublicKey(n.payTo);
 
-  const secret = bs58.decode(svmSecretKeyBase58);
-  const user = Keypair.fromSecretKey(secret);
+  let userPublicKey: PublicKey;
+  let signTx: (tx: VersionedTransaction) => Promise<VersionedTransaction>;
 
-  const sourceAta = getAssociatedTokenAddressSync(mint, user.publicKey);
+  if (svmSigner) {
+    userPublicKey = new PublicKey(svmSigner.publicKey);
+    if (!svmSigner.signTransaction) {
+      throw new PaymentRejectedError(
+        'SvmSigner.signTransaction is required for auto-payment. ' +
+        'Implement signTransaction() or provide svmPrivateKey instead.',
+      );
+    }
+    const signer = svmSigner;
+    signTx = async (tx: VersionedTransaction) => {
+      const signed = await signer.signTransaction!(tx.serialize());
+      return VersionedTransaction.deserialize(signed);
+    };
+  } else if (svmSecretKeyBase58) {
+    const secret = bs58.decode(svmSecretKeyBase58);
+    const user = Keypair.fromSecretKey(secret);
+    userPublicKey = user.publicKey;
+    signTx = async (tx: VersionedTransaction) => {
+      tx.sign([user]);
+      return tx;
+    };
+  } else {
+    throw new PaymentRejectedError('No SVM credential available for payment signing.');
+  }
+
+  const sourceAta = getAssociatedTokenAddressSync(mint, userPublicKey);
   const destAta = getAssociatedTokenAddressSync(mint, payToOwner);
 
   const amount = BigInt(n.amount);
   const decimals = n.decimals;
 
-  // Facilitator fee payer must not appear in instruction accounts (policy:fee_payer_not_isolated).
-  // Buyer pays rent for idempotent dest ATA creation; facilitator only pays tx fee in header.
   const ixCreateDest = createAssociatedTokenAccountIdempotentInstruction(
-    user.publicKey,
+    userPublicKey,
     destAta,
     payToOwner,
     mint,
@@ -138,7 +166,7 @@ export async function buildSolanaX402PaymentPayload(
     sourceAta,
     mint,
     destAta,
-    user.publicKey,
+    userPublicKey,
     amount,
     decimals,
     [],
@@ -154,9 +182,9 @@ export async function buildSolanaX402PaymentPayload(
   }).compileToV0Message();
 
   const tx = new VersionedTransaction(message);
-  tx.sign([user]);
+  const signedTx = await signTx(tx);
 
-  const transaction = Buffer.from(tx.serialize()).toString('base64');
+  const transaction = Buffer.from(signedTx.serialize()).toString('base64');
 
   return {
     x402Version: 2,
