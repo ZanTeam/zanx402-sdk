@@ -23,7 +23,7 @@ async function run() {
   console.log('║   x402 SDK End-to-End Verification       ║');
   console.log('╚══════════════════════════════════════════╝');
   console.log(`  Gateway : ${GATEWAY}`);
-  console.log(`  Key     : ${PRIVATE_KEY.slice(0, 10)}...`);
+  console.log(`  Key     : ${process.env.EVM_PRIVATE_KEY ? '(env) set' : '(auto-generated)'}`);
 
   // ── Step 1: Discovery (public, no auth) ──────────────────
   section('1. Discovery（公开接口，无需认证）');
