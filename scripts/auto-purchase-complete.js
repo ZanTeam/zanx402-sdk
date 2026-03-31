@@ -62,7 +62,7 @@ async function main() {
     console.error('❌ Error:', err.message);
     if (err.code === 'INSUFFICIENT_CREDITS') {
       console.log('\n💡 Suggestion: Check your wallet balance or use testnet');
-      console.log('   Run: node scripts/testnet-faucet.js sepolia');
+      console.log('   Ensure your wallet has sufficient USDC on the payment network.');
     }
   }
 }

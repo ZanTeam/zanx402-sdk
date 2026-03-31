@@ -13,7 +13,6 @@ const COMMANDS = {
   'get-usage': 'View your usage statistics',
   'estimate-cost': 'Calculate API call costs before making them',
   'purchase-credits': 'Buy credit bundles',
-  'testnet-faucet': 'Get testnet tokens for development',
   'rpc-call': 'Make blockchain RPC calls',
   'list-networks': 'Show available networks',
   'authenticate': 'Authenticate with your wallet'
@@ -60,7 +59,6 @@ function main() {
     console.log('  4. node scripts/rpc-call.js ...   # Make API calls');
 
     console.log('\n💡 Pro Tips:');
-    console.log('  • Use testnet-faucet.js for development');
     console.log('  • Check status.js regularly for balance');
     console.log('  • Use estimate-cost.js before expensive calls');
     console.log('  • Set environment variables in .env file');

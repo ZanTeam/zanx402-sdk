@@ -1,8 +1,17 @@
 # @zan_team/x402
 
-TypeScript SDK for the **x402 Gateway Platform** — access blockchain RPC and Web2 SaaS APIs with on-chain USDC payments via the [x402 protocol](https://x402.org).
+TypeScript SDK for the **x402 Gateway Platform**. Implements the [x402 protocol](https://x402.org) HTTP payment semantics—workloads access **JSON-RPC**, **provider HTTP routes**, and **Web2 SaaS** surfaces through one gateway, settling in **on-chain USDC** when the facilitator requires it.
 
-Inspired by [QuickNode SDK](https://www.quicknode.com/docs/quicknode-sdk), featuring modular architecture, tree-shakeable imports, and automatic payment flow.
+| Capability | Detail |
+|---|---|
+| Authentication | SIWE (EVM) / SIWS (SVM) → JWT session with auto-refresh |
+| Payment automation | Transparent 402 → purchase → on-chain signature → retry |
+| Multi-chain | EVM via viem; optional Solana path (`@solana/web3.js`) |
+| Transport | `client.call()` high-level RPC, `client.fetch()` standard HTTP |
+| Discovery | Networks, bundles, x402 capability — no auth required |
+| Packaging | ESM + CJS dual build, subpath exports, tree-shakeable |
+
+**For AI agents & autonomous systems** — single session primitive, machine-parseable 402 challenges, discovery-first design for dynamic tool catalogs. See [Quickstart](./docs/quickstart.md) for a step-by-step walkthrough.
 
 ## Installation
 
@@ -10,264 +19,151 @@ Inspired by [QuickNode SDK](https://www.quicknode.com/docs/quicknode-sdk), featu
 npm install @zan_team/x402 viem
 ```
 
-## Quick Start
+Solana optional dependencies (only if using SVM auth / payment):
+
+```bash
+npm install @solana/web3.js @solana/spl-token bs58 tweetnacl
+```
+
+> For local development from source, see [Quickstart § Local Install](./docs/quickstart.md#从源码本地安装).
+
+## Quick example
 
 ```typescript
-import { X402Client } from '@zan_team/x402';
+import { createX402Client } from '@zan_team/x402';
 
-const client = new X402Client({
+const client = await createX402Client({
   gatewayUrl: 'https://x402.zan.top',
-  privateKey: '0x...',
-  autoPayment: true,          // auto-purchase credits on 402
-  defaultBundle: 'default',   // bundle for auto-purchase
+  privateKey: process.env.PRIVATE_KEY as `0x${string}`,
+  autoPayment: true,
+  preAuth: true,
 });
 
-// Authenticate (auto-handled on first request)
-await client.authenticate();
-
-// JSON-RPC call
-const blockNumber = await client.call('eth', 'mainnet', 'eth_blockNumber');
-console.log(blockNumber.result);
-
-// Credit balance
-const balance = await client.getBalance();
-console.log(`Credits: ${balance.balance}`);
+const block = await client.call('eth', 'mainnet', 'eth_blockNumber');
+console.log(block.result);
 ```
 
 ## Architecture
 
 ```
 X402Client
-├── auth       — AuthModule     (SIWE wallet authentication + JWT lifecycle)
-├── credits    — CreditsModule  (balance, purchase, usage, payment status)
-├── rpc        — RpcModule      (JSON-RPC calls, batch, generic provider forwarding)
-└── discovery  — DiscoveryModule(health, providers, networks, bundles, x402 capability)
+├── auth       AuthModule      SIWE/SIWS + JWT lifecycle
+├── credits    CreditsModule   balance · purchase · usage · payment status
+├── rpc        RpcModule       JSON-RPC · batch · generic provider forward
+└── discovery  DiscoveryModule health · providers · networks · bundles · x402 cap
 ```
 
-### Tree-Shaking
-
-Import only the modules you need:
-
-```typescript
-import { RpcModule } from '@zan_team/x402/rpc';
-import { DiscoveryModule } from '@zan_team/x402/credits';
-```
+Subpath exports: `@zan_team/x402/auth`, `/credits`, `/rpc`. `DiscoveryModule` via package root.
 
 ## Configuration
 
 ```typescript
 interface X402ClientConfig {
-  gatewayUrl: string;           // Gateway base URL
-  wallet?: WalletClient;        // viem WalletClient for signing
-  privateKey?: `0x${string}`;   // Alternative: hex private key
-  chainType?: 'EVM' | 'SVM';   // Auth chain type (default: 'EVM')
-  autoPayment?: boolean;        // Auto-purchase on 402 (default: false)
-  defaultBundle?: BundleType;   // Bundle for auto-purchase (default: 'default')
-  timeout?: number;             // Request timeout in ms (default: 30000)
-  fetch?: typeof fetch;         // Custom fetch implementation
+  gatewayUrl: string;
+  // EVM
+  wallet?: WalletClient;
+  privateKey?: `0x${string}`;
+  // SVM
+  svmPrivateKey?: string;       // Base58
+  paymentNetwork?: string;      // CAIP-2, e.g. "eip155:8453"
+  solanaRpcUrl?: string;
+  // Behavior
+  chainType?: 'EVM' | 'SVM';   // auto-detected from keys
+  autoPayment?: boolean;        // default: false
+  defaultBundle?: BundleType;   // default: 'default'
+  preAuth?: boolean;            // pre-authenticate on creation
+  timeout?: number;             // ms, default: 30000
+  fetch?: typeof fetch;         // custom fetch impl
 }
 ```
 
-## API Reference
+## Error hierarchy
 
-### Authentication
+All errors extend `X402Error` with typed `code` and optional `statusCode`.
 
-```typescript
-// SIWE authentication — returns JWT + account info
-const auth = await client.authenticate();
-// { token, expiresIn, wallet, chainType, tier, balance }
+| Error | HTTP | Scenario |
+|---|---|---|
+| `AuthenticationError` | 401 | SIWE/SIWS rejected |
+| `SessionExpiredError` | 401 | JWT expired |
+| `InsufficientCreditsError` | 402 | Not enough credits (`required`, `balance`) |
+| `InsufficientFundsError` | 402 | On-chain USDC too low |
+| `PaymentRejectedError` | 402 | Facilitator rejected payment |
+| `MethodNotAllowedError` | 403 | Method not allowed for tier |
+| `ProviderNotFoundError` | 404 | No matching provider route |
+| `UpstreamError` | 504 | Provider failure (`creditRefunded`) |
+| `NetworkError` | — | Transport / timeout |
 
-// Access auth module directly
-client.auth.getSession();    // current session
-client.auth.isExpired();     // check expiry
-client.auth.clearSession();  // logout
-```
-
-### RPC Calls
-
-```typescript
-// Single JSON-RPC call (auto-payment on 402 if enabled)
-const result = await client.call('eth', 'mainnet', 'eth_blockNumber');
-const balance = await client.call('eth', 'mainnet', 'eth_getBalance', [
-  '0x742d35Cc6634C0532925a3b844Bc9e7595f2bD18',
-  'latest',
-]);
-
-// Batch RPC (single HTTP request)
-const results = await client.rpc.batch('eth', 'mainnet', [
-  { method: 'eth_blockNumber' },
-  { method: 'eth_gasPrice' },
-  { method: 'net_version' },
-]);
-
-// Generic provider call (AI, data APIs, etc.)
-const aiResult = await client.forward('/api/ai/gpt4', {
-  method: 'POST',
-  body: { prompt: 'Explain x402 protocol' },
-});
-```
-
-### Credits
-
-```typescript
-// Check balance
-const bal = await client.getBalance();
-// { wallet, balance, totalPurchased, totalConsumed, tier }
-
-// Purchase credits (triggers x402 payment flow)
-const receipt = await client.purchaseCredits('default');
-// { success, bundle, creditsPurchased, balance, tier, txHash }
-
-// Query usage
-const usage = await client.getUsage({
-  limit: 50,
-  offset: 0,
-  provider: 'zan-rpc',
-});
-
-// Check payment status
-const status = await client.getPaymentStatus('idempotency-key-123');
-```
-
-### Discovery (No Auth Required)
-
-```typescript
-// Health check
-const health = await client.health();
-
-// List providers
-const { providers } = await client.listProviders();
-
-// List supported networks
-const { networks } = await client.listNetworks();
-
-// List credit bundles
-const { bundles } = await client.listBundles();
-
-// x402 capability declaration
-const capability = await client.getX402Capability();
-```
-
-## Auto-Payment Flow
-
-When `autoPayment: true`, the SDK handles 402 responses automatically:
+## Auto-payment flow
 
 ```
 Client                   Gateway                  Facilitator
-  │                        │                          │
-  │── POST /rpc/eth/main ─>│                          │
-  │<── 402 insufficient ───│                          │
-  │                        │                          │
-  │  [auto-purchase triggered]                        │
-  │── POST /credits/purchase/default ────────────────>│
-  │<── 402 + PAYMENT-REQUIRED ───────────────────────│
-  │                        │                          │
-  │  [sign EIP-3009 transferWithAuthorization]        │
-  │── POST /credits/purchase/default (w/ signature) ─>│
-  │                        │── POST /verify ─────────>│
-  │                        │<── valid, txHash ────────│
-  │<── 200 + credits ─────│                          │
-  │                        │                          │
-  │── POST /rpc/eth/main ─>│  [retry original call]   │
-  │<── 200 + result ───────│                          │
+  │── POST /rpc/eth/main ─>│
+  │<── 402 ────────────────│
+  │── POST /purchase/default ──────────────────────>│
+  │<── 402 + PAYMENT-REQUIRED ─────────────────────│
+  │  [sign EIP-3009 / Solana SPL]
+  │── POST /purchase/default (+ signature) ────────>│
+  │                        │── POST /verify ───────>│
+  │                        │<── valid, txHash ──────│
+  │<── 200 + credits ──────│
+  │── POST /rpc/eth/main ─>│  [retry]
+  │<── 200 + result ───────│
 ```
 
-## Error Handling
+## Project structure
 
-```typescript
-import {
-  AuthenticationError,
-  InsufficientCreditsError,
-  InsufficientFundsError,
-  PaymentRejectedError,
-  ProviderNotFoundError,
-  MethodNotAllowedError,
-  UpstreamError,
-  NetworkError,
-} from '@zan_team/x402';
-
-try {
-  await client.call('eth', 'mainnet', 'eth_blockNumber');
-} catch (err) {
-  if (err instanceof InsufficientCreditsError) {
-    console.log(`Need ${err.required} credits, have ${err.balance}`);
-  } else if (err instanceof UpstreamError) {
-    console.log(`Provider error, refunded: ${err.creditRefunded}`);
-  } else if (err instanceof NetworkError) {
-    console.log('Network issue:', err.message);
-  }
-}
 ```
-
-## Using with viem WalletClient
-
-```typescript
-import { createWalletClient, http } from 'viem';
-import { privateKeyToAccount } from 'viem/accounts';
-import { mainnet } from 'viem/chains';
-import { X402Client } from '@zan_team/x402';
-
-const account = privateKeyToAccount('0x...');
-const walletClient = createWalletClient({
-  account,
-  chain: mainnet,
-  transport: http(),
-});
-
-const client = new X402Client({
-  gatewayUrl: 'https://x402.zan.top',
-  wallet: walletClient,
-  autoPayment: true,
-});
+zanx402-sdk/
+├── src/
+│   ├── index.ts                  # public API re-exports
+│   ├── client.ts                 # X402Client + createX402Client
+│   ├── constants.ts              # endpoints, defaults
+│   ├── types/
+│   │   ├── common.ts             # config, enums
+│   │   ├── auth.ts               # auth request/response
+│   │   ├── credits.ts            # credits, payment, usage
+│   │   ├── discovery.ts          # discovery responses
+│   │   ├── provider.ts           # JSON-RPC types
+│   │   └── index.ts              # type barrel
+│   ├── modules/
+│   │   ├── auth.ts               # SIWE/SIWS + JWT
+│   │   ├── credits.ts            # balance, purchase, usage
+│   │   ├── rpc.ts                # JSON-RPC + forward
+│   │   └── discovery.ts          # health, networks, bundles
+│   ├── errors/
+│   │   └── index.ts              # X402Error hierarchy
+│   └── utils/
+│       ├── http.ts               # HTTP client w/ timeout
+│       ├── siwe.ts               # SIWE message builder
+│       ├── siws.ts               # SIWS message builder
+│       ├── x402.ts               # EVM payment helpers
+│       └── solana-x402-payment.ts # SVM payment helpers
+├── tests/                        # vitest unit tests
+├── scripts/                      # CLI helper scripts
+├── docs/
+│   └── quickstart.md             # step-by-step guide
+├── package.json
+├── tsconfig.json
+├── tsconfig.esm.json
+├── tsconfig.cjs.json
+└── vitest.config.ts
 ```
 
 ## Development
 
 ```bash
-# Install dependencies
-npm install
-
-# Type check
-npx tsc --noEmit
-
-# Run tests
-npm test
-
-# Build (ESM + CJS)
-npm run build
+npm install         # dependencies
+npm run typecheck   # tsc --noEmit
+npm test            # vitest
+npm run build       # ESM + CJS → dist/
 ```
 
-## Project Structure
-
-```
-sdk/typescript/
-├── src/
-│   ├── index.ts           # Public API re-exports
-│   ├── client.ts          # X402Client main entry
-│   ├── constants.ts       # Default config / endpoint paths
-│   ├── types/             # TypeScript type definitions
-│   │   ├── common.ts      # Shared types (config, enums)
-│   │   ├── auth.ts        # Auth request/response types
-│   │   ├── credits.ts     # Credits/payment types
-│   │   ├── discovery.ts   # Discovery endpoint types
-│   │   └── provider.ts    # JSON-RPC / provider types
-│   ├── modules/           # Feature modules
-│   │   ├── auth.ts        # SIWE authentication + JWT
-│   │   ├── credits.ts     # Balance, purchase, usage
-│   │   ├── rpc.ts         # JSON-RPC + generic forwarding
-│   │   └── discovery.ts   # Health, providers, networks
-│   ├── errors/            # Custom error hierarchy
-│   │   └── index.ts
-│   └── utils/             # Internal utilities
-│       ├── http.ts        # HTTP client with timeout
-│       ├── siwe.ts        # SIWE message builder
-│       └── x402.ts        # x402 payment helpers
-├── tests/                 # Vitest unit tests
-├── package.json
-├── tsconfig.json
-└── vitest.config.ts
-```
+Requires **Node.js >= 18**.
 
 ## License
 
 MIT
+
+---
+
+[中文文档](./README.zh-CN.md) | [Quickstart →](./docs/quickstart.md)

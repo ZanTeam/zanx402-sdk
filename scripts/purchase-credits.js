@@ -48,10 +48,9 @@ try {
       paymentOptions: result._paymentRequired,
       instructions: {
         nextSteps: [
-          '1. Use testnet-faucet.js for testnet tokens',
-          '2. Check estimate-cost.js for pricing',
-          '3. Complete payment with your wallet',
-          '4. Retry purchase after confirmation'
+          '1. Check estimate-cost.js for pricing',
+          '2. Complete payment with your wallet',
+          '3. Retry purchase after confirmation'
         ]
       }
     }, null, 2));

@@ -80,7 +80,6 @@ function main() {
   console.log('\n⚡ Quick Actions');
   console.log('   • node scripts/quick-start.js       - Setup wizard');
   console.log('   • node scripts/estimate-cost.js     - Cost calculator');
-  console.log('   • node scripts/testnet-faucet.js    - Get testnet tokens');
   console.log('   • node scripts/purchase-credits.js  - Buy credits');
   console.log('   • node scripts/status.js            - This dashboard');
 }

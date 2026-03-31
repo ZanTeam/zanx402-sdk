@@ -1,7 +1,7 @@
 {
   "name": "@zan_team/x402",
   "version": "1.1.0",
-  "description": "TypeScript SDK for x402 Gateway Platform — blockchain RPC & Web2 API access with on-chain USDC payments",
+  "description": "TypeScript SDK for the x402 gateway: unified JSON-RPC and HTTP APIs with on-chain USDC settlement; typed modules and 402 automation for programmatic clients and AI agents",
   "main": "./dist/cjs/index.js",
   "module": "./dist/esm/index.js",
   "types": "./dist/types/index.d.ts",
@@ -35,6 +35,7 @@
   "files": [
     "dist",
     "README.md",
+    "README.zh-CN.md",
     "LICENSE"
   ],
   "scripts": {

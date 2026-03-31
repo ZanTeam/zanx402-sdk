@@ -69,6 +69,12 @@ export async function signSolanaMessage(
   });
 
   const secretKey: Uint8Array = bs58.decode(secretKeyBase58);
+  if (secretKey.length !== 64) {
+    throw new Error(
+      `Invalid Solana secret key: expected 64 bytes (private + public), got ${secretKey.length}. ` +
+      `Provide the full keypair, not just the seed.`,
+    );
+  }
   const publicKey: Uint8Array = secretKey.slice(32);
   const msgBytes = new TextEncoder().encode(message);
   const sig: Uint8Array = nacl.sign.detached(msgBytes, secretKey);

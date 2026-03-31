@@ -18,7 +18,7 @@ export {
   NetworkError,
 } from './errors/index.js';
 
-export { HttpClient } from './utils/http.js';
+export { HttpClient, assertShape } from './utils/http.js';
 export { buildSiweMessage, extractDomain, generateNonce } from './utils/siwe.js';
 export { buildSiwsMessage, signSolanaMessage } from './utils/siws.js';
 export {
@@ -34,4 +34,4 @@ export {
 
 export type * from './types/index.js';
 
-export { ENDPOINTS, HEADERS, DEFAULT_TIMEOUT, DEFAULT_GATEWAY_URL } from './constants.js';
+export { ENDPOINTS, HEADERS, DEFAULT_TIMEOUT, DEFAULT_GATEWAY_URL, SIWE_EXPIRY_MS } from './constants.js';

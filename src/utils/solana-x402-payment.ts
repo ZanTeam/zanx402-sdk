@@ -53,12 +53,15 @@ async function getLatestBlockhashFromCandidates(rpcUrls: string[]): Promise<stri
   );
 }
 
+const DEFAULT_USDC_DECIMALS = 6;
+
 function normalizeOption(opt: PaymentOption & Record<string, unknown>): {
   network: string;
   scheme: string;
   asset: string;
   payTo: string;
   amount: string;
+  decimals: number;
 } {
   const asset = (opt.asset ?? opt.tokenAddress) as string | undefined;
   const payTo = (opt.payTo ?? opt.recipient) as string | undefined;
@@ -71,6 +74,7 @@ function normalizeOption(opt: PaymentOption & Record<string, unknown>): {
     asset,
     payTo,
     amount: opt.amount,
+    decimals: opt.decimals ?? DEFAULT_USDC_DECIMALS,
   };
 }
 
@@ -118,7 +122,7 @@ export async function buildSolanaX402PaymentPayload(
   const destAta = getAssociatedTokenAddressSync(mint, payToOwner);
 
   const amount = BigInt(n.amount);
-  const decimals = 6;
+  const decimals = n.decimals;
 
   // Facilitator fee payer must not appear in instruction accounts (policy:fee_payer_not_isolated).
   // Buyer pays rent for idempotent dest ATA creation; facilitator only pays tx fee in header.

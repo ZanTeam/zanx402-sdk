@@ -1,6 +1,21 @@
 import { HEADERS, DEFAULT_TIMEOUT } from '../constants.js';
 import { NetworkError, X402Error } from '../errors/index.js';
 
+/**
+ * Lightweight runtime check that `obj` has every key in `keys` with a non-undefined value.
+ * Used as a minimal guard against malformed gateway responses.
+ */
+export function assertShape<T>(obj: unknown, keys: string[], label: string): asserts obj is T {
+  if (obj == null || typeof obj !== 'object') {
+    throw new X402Error(`Invalid ${label} response: expected object, got ${typeof obj}`, 'INVALID_RESPONSE');
+  }
+  for (const k of keys) {
+    if (!(k in (obj as Record<string, unknown>))) {
+      throw new X402Error(`Invalid ${label} response: missing field "${k}"`, 'INVALID_RESPONSE');
+    }
+  }
+}
+
 export interface HttpRequestOptions {
   method?: string;
   headers?: Record<string, string>;

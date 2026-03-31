@@ -64,13 +64,23 @@ export class X402Client {
     Pick<X402ClientConfig, 'gatewayUrl' | 'chainType' | 'autoPayment' | 'defaultBundle' | 'timeout'>
   >;
   private readonly http: HttpClient;
+  private purchasePromise?: Promise<PurchaseSuccess>;
 
   constructor(config: X402ClientConfig) {
+    const gatewayUrl = config.gatewayUrl ?? DEFAULT_GATEWAY_URL;
+    const isLocalhost = /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)?/i.test(gatewayUrl);
+    if (gatewayUrl.startsWith('http://') && !isLocalhost) {
+      console.warn(
+        '[x402] WARNING: gatewayUrl uses plain HTTP. Private keys, JWTs, and payment ' +
+        'signatures will be transmitted in cleartext. Use HTTPS in production.',
+      );
+    }
+
     const detectedChainType: ChainType =
       config.chainType ?? (config.svmPrivateKey ? 'SVM' : 'EVM');
 
     this.config = {
-      gatewayUrl: config.gatewayUrl ?? DEFAULT_GATEWAY_URL,
+      gatewayUrl,
       chainType: detectedChainType,
       autoPayment: config.autoPayment ?? false,
       defaultBundle: config.defaultBundle ?? DEFAULT_BUNDLE,
@@ -106,11 +116,29 @@ export class X402Client {
     return this.http.getToken();
   }
 
-  // ─── Auth ───────────────────────────────────────────────────
+  // ─── Lifecycle ──────────────────────────────────────────────
 
   /** Authenticate with the gateway (SIWE/SIWS) */
   async authenticate(): Promise<AuthSuccess> {
     return this.auth.authenticate();
+  }
+
+  /** Wipe private keys and session from memory. */
+  destroy(): void {
+    this.auth.destroy();
+  }
+
+  /**
+   * Concurrency-safe auto-purchase: only one purchase runs at a time.
+   * Subsequent callers await the same promise.
+   */
+  private autoPurchase(): Promise<PurchaseSuccess> {
+    if (!this.purchasePromise) {
+      this.purchasePromise = this.credits
+        .purchaseCredits(this.config.defaultBundle)
+        .finally(() => { this.purchasePromise = undefined; });
+    }
+    return this.purchasePromise;
   }
 
   // ─── Fetch (transparent proxy) ──────────────────────────────
@@ -155,7 +183,7 @@ export class X402Client {
     let response = await fetchFn(url, { ...init, headers });
 
     if (response.status === 402 && this.config.autoPayment) {
-      await this.credits.purchaseCredits(this.config.defaultBundle);
+      await this.autoPurchase();
 
       const retryHeaders = new Headers(init?.headers);
       const refreshedToken = this.getToken();
@@ -189,7 +217,7 @@ export class X402Client {
       return await this.rpc.call<T>(ecosystem, network, method, params);
     } catch (err) {
       if (err instanceof InsufficientCreditsError && this.config.autoPayment) {
-        await this.credits.purchaseCredits(this.config.defaultBundle);
+        await this.autoPurchase();
         return this.rpc.call<T>(ecosystem, network, method, params);
       }
       throw err;
@@ -205,7 +233,7 @@ export class X402Client {
       return await this.rpc.forward<T>(path, options);
     } catch (err) {
       if (err instanceof InsufficientCreditsError && this.config.autoPayment) {
-        await this.credits.purchaseCredits(this.config.defaultBundle);
+        await this.autoPurchase();
         return this.rpc.forward<T>(path, options);
       }
       throw err;
@@ -261,24 +289,6 @@ export class X402Client {
     return this.discovery.getX402Capability();
   }
 
-  // ─── Faucet (dev/test helper) ───────────────────────────────
-
-  /**
-   * Claim demo credits from the gateway's faucet endpoint.
-   * Only available in test/demo environments.
-   *
-   * @returns Faucet response with creditsGranted and new balance
-   */
-  async faucet(): Promise<{ creditsGranted: number; balance: number }> {
-    await this.auth.ensureAuthenticated();
-    const { data, status } = await this.http.post<{ creditsGranted: number; balance: number }>(
-      '/demo/faucet',
-    );
-    if (status !== 200) {
-      throw new Error(`Faucet request failed with status ${status}: ${JSON.stringify(data)}`);
-    }
-    return data;
-  }
 }
 
 // ─── Factory Function ──────────────────────────────────────────
@@ -287,8 +297,7 @@ export class X402Client {
  * Create an X402Client with optional pre-authentication.
  *
  * When `preAuth: true` is set, the factory authenticates (SIWE/SIWS + JWT)
- * before returning, so the first request is faster — matching the
- * QuickNode `createQuicknodeX402Client({ preAuth: true })` pattern.
+ * before returning, so the first request is faster.
  *
  * @example
  * ```ts

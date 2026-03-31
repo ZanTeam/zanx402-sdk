@@ -26,3 +26,6 @@ export const HEADERS = {
 
 /** JWT refresh buffer — re-authenticate 60s before expiry */
 export const JWT_REFRESH_BUFFER_MS = 60_000;
+
+/** SIWE/SIWS message expiry — 5 minutes from issuance */
+export const SIWE_EXPIRY_MS = 5 * 60 * 1000;

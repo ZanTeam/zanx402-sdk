@@ -7,7 +7,7 @@ import type {
   PaymentRequiredPayload,
 } from '../types/credits.js';
 import type { BundleType } from '../types/common.js';
-import { HttpClient } from '../utils/http.js';
+import { HttpClient, assertShape } from '../utils/http.js';
 import { ENDPOINTS, HEADERS } from '../constants.js';
 import { InsufficientCreditsError, PaymentRejectedError, X402Error } from '../errors/index.js';
 import { parsePaymentRequired, encodePaymentSignature } from '../utils/x402.js';
@@ -39,7 +39,7 @@ export class CreditsModule {
     paymentRequired: PaymentRequiredPayload,
   ): Promise<PurchaseSuccess | null> {
     if (this.auth.getChainType() !== 'SVM') return null;
-    const svm = this.auth.getSvmPrivateKey();
+    const svm = this.auth._borrowSvmPrivateKey();
     if (!svm) return null;
     const option = pickSolanaPaymentOption(paymentRequired.accepts, this.paymentNetwork);
     if (!option) return null;
@@ -59,6 +59,7 @@ export class CreditsModule {
     if (status !== 200) {
       throw new X402Error(`Failed to get balance: status ${status}`, 'BALANCE_ERROR', status, data);
     }
+    assertShape<BalanceResponse>(data, ['wallet', 'balance'], 'balance');
     return data;
   }
 
@@ -116,11 +117,12 @@ export class CreditsModule {
     });
 
     if (status !== 200) {
-      throw new PaymentRejectedError(
-        `Payment rejected with status ${status}: ${JSON.stringify(data)}`,
-      );
+      const body = data as unknown as Record<string, unknown> | undefined;
+      const reason = (body?.error as string) ?? (body?.message as string) ?? `status ${status}`;
+      throw new PaymentRejectedError(`Payment rejected: ${reason}`);
     }
 
+    assertShape<PurchaseSuccess>(data, ['success', 'bundle', 'balance'], 'purchase');
     return data;
   }
 

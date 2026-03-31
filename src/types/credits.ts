@@ -65,6 +65,8 @@ export interface PaymentOption {
   asset?: string;
   payTo?: string;
   amount: string;
+  /** Token decimals (defaults to 6 for USDC if omitted) */
+  decimals?: number;
   description?: string;
 }
 

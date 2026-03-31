@@ -55,10 +55,20 @@ export function extractDomain(url: string): string {
   }
 }
 
-/** Generate a random nonce (alphanumeric, 16 chars) */
+/** Generate a random nonce (alphanumeric, 16 chars) with rejection sampling to eliminate modulo bias. */
 export function generateNonce(): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  const bytes = new Uint8Array(16);
-  crypto.getRandomValues(bytes);
-  return Array.from(bytes, (b) => chars[b % chars.length]).join('');
+  const limit = 256 - (256 % chars.length); // 248 — largest multiple of 62 ≤ 256
+  const result: string[] = [];
+  while (result.length < 16) {
+    const bytes = new Uint8Array(32);
+    crypto.getRandomValues(bytes);
+    for (const b of bytes) {
+      if (b < limit) {
+        result.push(chars[b % chars.length]);
+        if (result.length === 16) break;
+      }
+    }
+  }
+  return result.join('');
 }

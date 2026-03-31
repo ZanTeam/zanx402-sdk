@@ -16,6 +16,14 @@ export class RpcModule {
   private readonly auth: AuthModule;
   private rpcIdCounter = 1;
 
+  private nextId(): number {
+    const id = this.rpcIdCounter++;
+    if (this.rpcIdCounter > Number.MAX_SAFE_INTEGER) {
+      this.rpcIdCounter = 1;
+    }
+    return id;
+  }
+
   constructor(http: HttpClient, auth: AuthModule) {
     this.http = http;
     this.auth = auth;
@@ -39,7 +47,7 @@ export class RpcModule {
     const path = `${ENDPOINTS.RPC}/${encodeURIComponent(ecosystem)}/${encodeURIComponent(network)}`;
     const body: JsonRpcRequest = {
       jsonrpc: '2.0',
-      id: this.rpcIdCounter++,
+      id: this.nextId(),
       method,
       params,
     };
@@ -66,7 +74,7 @@ export class RpcModule {
     const path = `${ENDPOINTS.RPC}/${encodeURIComponent(ecosystem)}/${encodeURIComponent(network)}`;
     const body = calls.map((c) => ({
       jsonrpc: '2.0',
-      id: this.rpcIdCounter++,
+      id: this.nextId(),
       method: c.method,
       params: c.params ?? [],
     }));
@@ -87,6 +95,13 @@ export class RpcModule {
    * const result = await rpc.forward('/api/ai/gpt4', { method: 'POST', body: { prompt: 'Hello' } });
    */
   async forward<T = unknown>(path: string, options: ProviderCallOptions = {}): Promise<T> {
+    if (!path.startsWith('/') || path.includes('://') || path.startsWith('//')) {
+      throw new X402Error(
+        'Invalid forward path: must start with "/" and must not contain "://" or "//"',
+        'INVALID_PATH',
+        400,
+      );
+    }
     await this.auth.ensureAuthenticated();
 
     const { data, status } = await this.http.request<T | Record<string, unknown>>(path, {

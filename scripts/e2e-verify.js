@@ -72,24 +72,8 @@ async function run() {
     pass(`balance → ${balance.balance} credits (purchased=${balance.totalPurchased}, consumed=${balance.totalConsumed})`);
   } catch (e) { allPassed = fail('balance', e); }
 
-  // ── Step 4: Faucet (claim test credits) ──────────────────
-  section('4. Faucet（领取测试积分）');
-
-  try {
-    const faucetResult = await client.faucet();
-    pass(`faucet → granted=${faucetResult.creditsGranted}, balance=${faucetResult.balance}`);
-  } catch (e) {
-    console.log(`  ⚠️  faucet 不可用（${e.message}），跳过 — 使用已有积分`);
-  }
-
-  // Re-check balance
-  try {
-    balance = await client.getBalance();
-    pass(`balance after faucet → ${balance.balance} credits`);
-  } catch (e) { allPassed = fail('balance after faucet', e); }
-
-  // ── Step 5: RPC Calls ────────────────────────────────────
-  section('5. RPC Calls（区块链 RPC 调用）');
+  // ── Step 4: RPC Calls ────────────────────────────────────
+  section('4. RPC Calls（区块链 RPC 调用）');
 
   if (!balance || balance.balance <= 0) {
     console.log('  ⚠️  余额为 0，尝试用 autoPayment 模式跳过...');
