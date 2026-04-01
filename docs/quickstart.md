@@ -8,11 +8,13 @@
 
 ## 前置条件
 
-| 项目 | 要求 |
-|---|---|
-| Node.js | >= 18 |
-| 包管理器 | npm / pnpm / yarn |
-| 钱包私钥 | EVM `0x` 十六进制私钥 **或** Solana Base58 密钥 |
+
+| 项目      | 要求                                     |
+| ------- | -------------------------------------- |
+| Node.js | >= 18                                  |
+| 包管理器    | npm / pnpm / yarn                      |
+| 钱包私钥    | EVM `0x` 十六进制私钥 **或** Solana Base58 密钥 |
+
 
 > 私钥仅用于本地签名（SIWE/SIWS + EIP-3009），不会发送到网关。建议通过环境变量传入。
 
@@ -35,7 +37,7 @@ npm install @solana/web3.js @solana/spl-token bs58 tweetnacl
 ### 从源码本地安装
 
 ```bash
-git clone https://code.alipay.com/chain-lab/zanx402-sdk.git
+git clone https://github.com/ZanTeam/zanx402-sdk.git
 cd zanx402-sdk
 npm install
 npm run build        # ESM + CJS → dist/
@@ -43,7 +45,7 @@ npm run build        # ESM + CJS → dist/
 
 在业务项目中引用：
 
-**`npm link`（全局软链接）**
+`**npm link`（全局软链接）**
 
 ```bash
 cd zanx402-sdk && npm link
@@ -265,4 +267,5 @@ main().catch(console.error);
 ## 下一步
 
 - 全部配置项与类型定义 → [README.zh-CN.md](../README.zh-CN.md)
-- 测试用例 → [`tests/`](../tests/)
+- 测试用例 → `[tests/](../tests/)`
+
