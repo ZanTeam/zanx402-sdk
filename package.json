@@ -1,6 +1,6 @@
 {
   "name": "@zan_team/x402",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "type": "module",
   "description": "TypeScript SDK for the x402 gateway: unified JSON-RPC and HTTP APIs with on-chain USDC settlement; typed modules and 402 automation for programmatic clients and AI agents",
   "main": "./dist/cjs/index.js",
