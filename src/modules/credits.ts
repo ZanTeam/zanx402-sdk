@@ -32,6 +32,11 @@ export class CreditsModule {
     this.solanaRpcUrl = opts?.solanaRpcUrl;
   }
 
+  private finalizePurchaseSuccess(data: unknown): PurchaseSuccess {
+    assertShape<PurchaseSuccess>(data, ['success', 'bundle', 'balance'], 'purchase');
+    return data as PurchaseSuccess;
+  }
+
   /**
    * When 402 + SVM credentials present: build SPL USDC tx, sign, complete purchase.
    * Supports both raw private key and abstract SvmSigner.
@@ -39,15 +44,22 @@ export class CreditsModule {
   private async tryCompleteSolanaPurchase(
     path: string,
     paymentRequired: PaymentRequiredPayload,
+    idempotencyKey: string,
   ): Promise<PurchaseSuccess | null> {
-    if (this.auth.getChainType() !== 'SVM') return null;
+    if (this.auth.getChainType() !== 'SVM') {
+      return null;
+    }
 
     const option = pickSolanaPaymentOption(paymentRequired.accepts, this.paymentNetwork);
-    if (!option) return null;
+    if (!option) {
+      return null;
+    }
 
     const svmSigner = this.auth._getSvmSigner();
     const svmKey = this.auth._borrowSvmPrivateKey();
-    if (!svmSigner && !svmKey) return null;
+    if (!svmSigner && !svmKey) {
+      return null;
+    }
 
     const payload = await buildSolanaX402PaymentPayload({
       svmSecretKeyBase58: svmKey,
@@ -56,7 +68,7 @@ export class CreditsModule {
       solanaRpcUrl: this.solanaRpcUrl,
     });
     const header = encodePaymentSignature(payload);
-    return this.completePurchase(path, header);
+    return this.completePurchase(path, header, idempotencyKey);
   }
 
   /**
@@ -66,6 +78,7 @@ export class CreditsModule {
   private async tryCompleteEvmPurchase(
     path: string,
     paymentRequired: PaymentRequiredPayload,
+    idempotencyKey: string,
   ): Promise<PurchaseSuccess | null> {
     if (this.auth.getChainType() !== 'EVM') return null;
 
@@ -82,7 +95,7 @@ export class CreditsModule {
       option,
     });
     const header = encodePaymentSignature(payload);
-    return this.completePurchase(path, header);
+    return this.completePurchase(path, header, idempotencyKey);
   }
 
   /** Get current credit balance */
@@ -107,16 +120,19 @@ export class CreditsModule {
     await this.auth.ensureAuthenticated();
 
     const path = `${ENDPOINTS.PURCHASE}/${bundle}`;
+    const idempotencyKey = globalThis.crypto.randomUUID();
 
     if (paymentSignature) {
-      return this.completePurchase(path, paymentSignature);
+      return this.completePurchase(path, paymentSignature, idempotencyKey);
     }
 
-    const initResponse = await this.http.post<PurchaseSuccess>(path);
+    const initResponse = await this.http.post<PurchaseSuccess>(path, undefined, {
+      headers: { [HEADERS.IDEMPOTENCY_KEY]: idempotencyKey },
+    });
     const initTraceId = extractTraceId(initResponse.headers, initResponse.data);
 
     if (initResponse.status === 200) {
-      return initResponse.data;
+      return this.finalizePurchaseSuccess(initResponse.data);
     }
 
     if (initResponse.status !== 402) {
@@ -134,10 +150,10 @@ export class CreditsModule {
       throw new PaymentRejectedError('402 received but no payment options available');
     }
 
-    const solCompleted = await this.tryCompleteSolanaPurchase(path, paymentRequired);
+    const solCompleted = await this.tryCompleteSolanaPurchase(path, paymentRequired, idempotencyKey);
     if (solCompleted) return solCompleted;
 
-    const evmCompleted = await this.tryCompleteEvmPurchase(path, paymentRequired);
+    const evmCompleted = await this.tryCompleteEvmPurchase(path, paymentRequired, idempotencyKey);
     if (evmCompleted) return evmCompleted;
 
     return {
@@ -150,9 +166,19 @@ export class CreditsModule {
    * Complete a purchase with a pre-built payment signature.
    * Typically called after the wallet has signed the EIP-3009 authorization.
    */
-  async completePurchase(path: string, paymentSignature: string): Promise<PurchaseSuccess> {
+  async completePurchase(
+    path: string,
+    paymentSignature: string,
+    idempotencyKey?: string,
+  ): Promise<PurchaseSuccess> {
+    const reqHeaders: Record<string, string> = {
+      [HEADERS.PAYMENT_SIGNATURE]: paymentSignature,
+    };
+    if (idempotencyKey) {
+      reqHeaders[HEADERS.IDEMPOTENCY_KEY] = idempotencyKey;
+    }
     const { data, status, headers } = await this.http.post<PurchaseSuccess>(path, undefined, {
-      headers: { [HEADERS.PAYMENT_SIGNATURE]: paymentSignature },
+      headers: reqHeaders,
     });
 
     const traceId = extractTraceId(headers, data);
@@ -165,8 +191,7 @@ export class CreditsModule {
       throw new PaymentRejectedError(`Payment rejected: ${reason}${hint}`, undefined, traceId, body);
     }
 
-    assertShape<PurchaseSuccess>(data, ['success', 'bundle', 'balance'], 'purchase');
-    return data;
+    return this.finalizePurchaseSuccess(data);
   }
 
   /** Query usage records */

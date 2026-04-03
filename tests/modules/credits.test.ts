@@ -81,7 +81,12 @@ describe('CreditsModule', () => {
       expectedPath,
       undefined,
       expect.objectContaining({
-        headers: { [HEADERS.PAYMENT_SIGNATURE]: 'payment-sig-123' },
+        headers: expect.objectContaining({
+          [HEADERS.PAYMENT_SIGNATURE]: 'payment-sig-123',
+          [HEADERS.IDEMPOTENCY_KEY]: expect.stringMatching(
+            /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+          ),
+        }),
       }),
     );
     expect(result).toEqual(expectedData);
@@ -116,7 +121,17 @@ describe('CreditsModule', () => {
     const credits = new CreditsModule(mockHttp as unknown as HttpClient, mockAuth);
     const result = await credits.purchaseCredits('default');
 
-    expect(vi.mocked(mockHttp.post)).toHaveBeenCalledWith(`${ENDPOINTS.PURCHASE}/default`);
+    expect(vi.mocked(mockHttp.post)).toHaveBeenCalledWith(
+      `${ENDPOINTS.PURCHASE}/default`,
+      undefined,
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          [HEADERS.IDEMPOTENCY_KEY]: expect.stringMatching(
+            /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+          ),
+        }),
+      }),
+    );
     expect(result).toHaveProperty('_paymentRequired');
     expect(
       (result as unknown as { _paymentRequired: { accepts: unknown[] } })._paymentRequired.accepts,

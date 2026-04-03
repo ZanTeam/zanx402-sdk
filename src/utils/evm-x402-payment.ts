@@ -4,7 +4,7 @@
  */
 import type { Account, Chain, Transport, WalletClient } from 'viem';
 import type { PaymentOption } from '../types/credits.js';
-import { PaymentRejectedError } from '../errors/index.js';
+import { PaymentRejectedError, X402Error } from '../errors/index.js';
 import { buildPaymentSignaturePayload } from './x402.js';
 
 /**
@@ -19,6 +19,12 @@ export function pickEvmPaymentOption(
   if (preferredNetwork) {
     const hit = evm.find((a) => a.network === preferredNetwork);
     if (hit) return hit;
+    const available = evm.map((a) => a.network).filter(Boolean).join(', ');
+    throw new X402Error(
+      `paymentNetwork "${preferredNetwork}" does not match any EVM entry in the gateway 402 accepts ` +
+        `(available: ${available}). Unset paymentNetwork to use the first EVM option.`,
+      'PAYMENT_NETWORK_MISMATCH',
+    );
   }
   return evm[0];
 }

@@ -12,20 +12,18 @@ import {
 import bs58 from 'bs58';
 import type { PaymentOption } from '../types/credits.js';
 import type { SvmSigner } from '../types/common.js';
-import { NetworkError, PaymentRejectedError } from '../errors/index.js';
+import { NetworkError, PaymentRejectedError, X402Error } from '../errors/index.js';
 
 /** Dexter public facilitator fee payer (must match gateway / x402.dexter.cash) */
 export const SOLANA_X402_FEE_PAYER = 'DEXVS3su4dZQWTvvPnLDJLRK1CeeKG6K3QqdzthgAkNV';
 
 /** 官方节点在部分网络环境会 `fetch failed`，按顺序尝试多个公共 RPC */
 const MAINNET_RPC_CANDIDATES = [
-  'https://rpc.ankr.com/solana',
-  'https://api.mainnet-beta.solana.com',
+  'https://api.zan.top/public/solana-mainnet'
 ];
 
 const DEVNET_RPC_CANDIDATES = [
-  'https://rpc.ankr.com/solana_devnet',
-  'https://api.devnet.solana.com',
+  'https://api.zan.top/public/solana-devnet'
 ];
 
 function rpcCandidatesForNetwork(network: string, override?: string): string[] {
@@ -91,6 +89,14 @@ export function pickSolanaPaymentOption(
   if (preferredNetwork) {
     const hit = sol.find((a) => a.network === preferredNetwork);
     if (hit) return hit as PaymentOption & Record<string, unknown>;
+    const available = sol.map((a) => a.network).filter(Boolean).join(', ');
+    throw new X402Error(
+      `paymentNetwork "${preferredNetwork}" does not match any Solana entry in the gateway 402 accepts ` +
+        `(available: ${available}). SOLANA_RPC_URL only selects RPC for blockhash; it does not change the ` +
+        `settlement network sent to the facilitator. Use the exact CAIP-2 from accepts, or unset paymentNetwork ` +
+        `to use the first Solana option (often mainnet).`,
+      'PAYMENT_NETWORK_MISMATCH',
+    );
   }
   return sol[0] as PaymentOption & Record<string, unknown>;
 }
