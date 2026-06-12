@@ -7,6 +7,11 @@ import type { PaymentOption } from '../types/credits.js';
 import { PaymentRejectedError, X402Error } from '../errors/index.js';
 import { buildPaymentSignaturePayload } from './x402.js';
 
+const ERC20_NAME_VERSION_ABI = [
+  { type: 'function', name: 'name', inputs: [], outputs: [{ type: 'string' }], stateMutability: 'view' },
+  { type: 'function', name: 'version', inputs: [], outputs: [{ type: 'string' }], stateMutability: 'view' },
+] as const;
+
 /**
  * Pick an EVM `accepts` entry. Prefer `preferredNetwork` (CAIP-2) when set.
  */
@@ -56,6 +61,57 @@ const EIP3009_TYPES = {
   ],
 } as const;
 
+/**
+ * Read token contract's EIP-712 domain name and version from on-chain.
+ * Falls back to common defaults if the contract doesn't expose these.
+ */
+async function fetchTokenDomain(
+  tokenAddress: `0x${string}`,
+  chainId: number,
+): Promise<{ name: string; version: string }> {
+  const { createPublicClient, http } = await import('viem');
+
+  const client = createPublicClient({
+    chain: { id: chainId, name: `chain-${chainId}`, nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 }, rpcUrls: { default: { http: [rpcUrlForChain(chainId)] } } },
+    transport: http(),
+  });
+
+  let name = 'USD Coin';
+  let version = '2';
+
+  try {
+    name = await client.readContract({
+      address: tokenAddress,
+      abi: ERC20_NAME_VERSION_ABI,
+      functionName: 'name',
+    });
+  } catch {
+    // fallback to default
+  }
+
+  try {
+    version = await client.readContract({
+      address: tokenAddress,
+      abi: ERC20_NAME_VERSION_ABI,
+      functionName: 'version',
+    });
+  } catch {
+    // fallback to default
+  }
+
+  return { name, version };
+}
+
+function rpcUrlForChain(chainId: number): string {
+  switch (chainId) {
+    case 8453: return 'https://mainnet.base.org';
+    case 84532: return 'https://sepolia.base.org';
+    case 1: return 'https://eth.drpc.org';
+    case 11155111: return 'https://rpc.sepolia.org';
+    default: return `https://rpc.ankr.com/eth`;
+  }
+}
+
 export interface BuildEvmX402PaymentPayloadParams {
   /** Raw EVM private key — used when walletClient is not provided. */
   privateKey?: `0x${string}`;
@@ -80,9 +136,11 @@ export async function buildEvmX402PaymentPayload(
   const validAfter = 0;
   const validBefore = Math.floor(Date.now() / 1000) + 3600;
 
+  const tokenDomain = await fetchTokenDomain(tokenAddress as `0x${string}`, chainId);
+
   const domain = {
-    name: 'USD Coin',
-    version: '2',
+    name: tokenDomain.name,
+    version: tokenDomain.version,
     chainId: BigInt(chainId),
     verifyingContract: tokenAddress as `0x${string}`,
   };
@@ -143,5 +201,7 @@ export async function buildEvmX402PaymentPayload(
     network: option.network,
     chainId,
     tokenAddress,
+    tokenName: tokenDomain.name,
+    tokenVersion: tokenDomain.version,
   });
 }

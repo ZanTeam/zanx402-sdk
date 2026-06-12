@@ -98,3 +98,40 @@ export class NetworkError extends X402Error {
     this.name = 'NetworkError';
   }
 }
+
+export class AiModelNotFoundError extends X402Error {
+  public readonly model: string;
+
+  constructor(model: string, traceId?: string) {
+    super(`Model '${model}' is not supported or does not exist`, 'MODEL_NOT_FOUND', 404, undefined, traceId);
+    this.name = 'AiModelNotFoundError';
+    this.model = model;
+  }
+}
+
+export class AiUpstreamError extends X402Error {
+  constructor(message: string, statusCode: number, traceId?: string) {
+    super(message, 'UPSTREAM_ERROR', statusCode, undefined, traceId);
+    this.name = 'AiUpstreamError';
+  }
+}
+
+export class AiPaymentRequiredError extends X402Error {
+  public readonly paymentRequired: import('../types/credits.js').PaymentRequiredPayload | null;
+
+  constructor(
+    model: string,
+    paymentRequired: import('../types/credits.js').PaymentRequiredPayload | null,
+    traceId?: string,
+  ) {
+    super(
+      `AI call to '${model}' requires payment (autoPayment is disabled)`,
+      'AI_PAYMENT_REQUIRED',
+      402,
+      undefined,
+      traceId,
+    );
+    this.name = 'AiPaymentRequiredError';
+    this.paymentRequired = paymentRequired;
+  }
+}

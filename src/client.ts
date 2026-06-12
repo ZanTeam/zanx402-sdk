@@ -15,14 +15,16 @@ import type {
   X402Capability,
 } from './types/discovery.js';
 import type { JsonRpcResponse, ProviderCallOptions } from './types/provider.js';
+import type { AiChatRequest, AiChatResponse, AiCallOptions } from './types/ai.js';
 import { HttpClient } from './utils/http.js';
 import { extractSettlementSession } from './utils/fetch-wrappers.js';
 import { AuthModule } from './modules/auth.js';
 import { CreditsModule } from './modules/credits.js';
 import { RpcModule } from './modules/rpc.js';
 import { DiscoveryModule } from './modules/discovery.js';
+import { AiModule } from './modules/ai.js';
 import { InsufficientCreditsError, X402Error } from './errors/index.js';
-import { DEFAULT_GATEWAY_URL, DEFAULT_TIMEOUT, DEFAULT_BUNDLE } from './constants.js';
+import { DEFAULT_GATEWAY_URL, DEFAULT_TIMEOUT, DEFAULT_BUNDLE, DEFAULT_AI_TIMEOUT } from './constants.js';
 
 /**
  * X402Client — unified entry point for the x402 Gateway Platform.
@@ -44,6 +46,7 @@ export class X402Client {
   readonly credits: CreditsModule;
   readonly rpc: RpcModule;
   readonly discovery: DiscoveryModule;
+  readonly ai: AiModule;
 
   private readonly config: Required<
     Pick<X402ClientConfig, 'gatewayUrl' | 'chainType' | 'autoPayment' | 'defaultBundle' | 'timeout'>
@@ -104,6 +107,12 @@ export class X402Client {
     });
     this.rpc = new RpcModule(this.http, this.auth);
     this.discovery = new DiscoveryModule(this.http);
+    this.ai = new AiModule(this.http, this.auth, {
+      autoPayment: this.config.autoPayment,
+      aiTimeout: config.aiTimeout ?? DEFAULT_AI_TIMEOUT,
+      paymentNetwork: config.paymentNetwork,
+      solanaRpcUrl: config.solanaRpcUrl,
+    });
   }
 
   // ─── Token ──────────────────────────────────────────────────
@@ -273,6 +282,16 @@ export class X402Client {
 
   async getPaymentStatus(idempotencyKey: string): Promise<PaymentStatus> {
     return this.credits.getPaymentStatus(idempotencyKey);
+  }
+
+  // ─── AI ─────────────────────────────────────────────────
+
+  async chat(
+    model: string,
+    request: AiChatRequest,
+    options?: AiCallOptions,
+  ): Promise<AiChatResponse> {
+    return this.ai.chat(model, request, options);
   }
 
   // ─── Discovery ──────────────────────────────────────────────

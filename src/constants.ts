@@ -34,3 +34,13 @@ export const JWT_REFRESH_BUFFER_MS = 60_000;
 
 /** SIWE/SIWS message expiry — 5 minutes from issuance */
 export const SIWE_EXPIRY_MS = 5 * 60 * 1000;
+
+export const AI_ENDPOINTS = {
+  CHAT: '/ai',
+  MODELS: '/api/models',
+  DISCOVERY: '/v1/discovery/ai',
+  CALLS: '/v1/ai/calls',
+  CALLS_STATS: '/v1/ai/calls/stats',
+} as const;
+
+export const DEFAULT_AI_TIMEOUT = 120_000;

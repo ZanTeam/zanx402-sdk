@@ -10,7 +10,7 @@
 import { X402Client } from '../dist/esm/index.js';
 import { generatePrivateKey } from 'viem/accounts';
 
-const GATEWAY = process.env.X402_GATEWAY_URL || 'http://localhost:8080';
+const GATEWAY = 'https://x402-labs.unchartedw3s.com/';
 const PRIVATE_KEY = process.env.EVM_PRIVATE_KEY || generatePrivateKey();
 
 const pass = (label) => console.log(`  ✅  ${label}`);
@@ -150,8 +150,48 @@ async function run() {
     pass(`usage → ${usage.records?.length ?? 0} records in current page`);
   } catch (e) { allPassed = fail('usage', e); }
 
-  // ── Step 8: Final balance ────────────────────────────────
-  section('8. Final Balance（最终余额）');
+  // ── Step 8: AI Module ─────────────────────────────────────
+  section('8. AI Module（AI 模型服务）');
+
+  // 8a. List models (public, no auth)
+  try {
+    const models = await client.ai.listModels();
+    const names = models.data.map(m => `${m.model_name}($${m.price})`).join(', ');
+    pass(`listModels → ${models.data.length} models: ${names}`);
+  } catch (e) { allPassed = fail('ai.listModels', e); }
+
+  // 8b. AI chat (requires payment — only if autoPayment available)
+  const AI_MODEL = process.env.X402_AI_MODEL || 'claude-opus-4-6';
+  const aiClient = new X402Client({
+    gatewayUrl: GATEWAY,
+    privateKey: PRIVATE_KEY,
+    chainType: 'EVM',
+    autoPayment: true,
+  });
+  await aiClient.authenticate();
+
+  try {
+    const aiRes = await aiClient.chat(AI_MODEL, {
+      messages: [{ role: 'user', content: '你是什么模型？请为我介绍x402协议' }],
+      max_tokens: 1024,
+    });
+    pass(`chat(${AI_MODEL}) → tokens=${aiRes.data.usage.total_tokens}\n\n${aiRes.data.content}\n`);
+  } catch (e) {
+    if (e.code === 'AI_PAYMENT_REQUIRED' || e.code === 'INSUFFICIENT_FUNDS' || e.code === 'NO_EVM_CREDENTIALS') {
+      console.log(`  ⚠️  chat(${AI_MODEL}) skipped: ${e.message}`);
+    } else {
+      allPassed = fail(`chat(${AI_MODEL})`, e);
+    }
+  }
+
+  // 8c. AI call history
+  try {
+    const history = await aiClient.ai.getCallHistory({ page: 0, size: 5 });
+    pass(`getCallHistory → ${history.total} total records`);
+  } catch (e) { allPassed = fail('ai.getCallHistory', e); }
+
+  // ── Step 9: Final balance ────────────────────────────────
+  section('9. Final Balance（最终余额）');
 
   try {
     const finalBal = await client.getBalance();

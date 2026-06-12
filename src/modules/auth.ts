@@ -150,7 +150,7 @@ export class AuthModule {
       address,
       uri: this.gatewayUrl,
       nonce,
-      chainId: await walletClient.getChainId(),
+      chainId: walletClient.chain?.id ?? 1,
       statement: this.statement,
       expirationTime: new Date(Date.now() + SIWE_EXPIRY_MS).toISOString(),
     });

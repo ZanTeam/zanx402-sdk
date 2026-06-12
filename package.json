@@ -31,6 +31,11 @@
       "import": "./dist/esm/modules/rpc.js",
       "require": "./dist/cjs/modules/rpc.js",
       "types": "./dist/types/modules/rpc.d.ts"
+    },
+    "./ai": {
+      "import": "./dist/esm/modules/ai.js",
+      "require": "./dist/cjs/modules/ai.js",
+      "types": "./dist/types/modules/ai.d.ts"
     }
   },
   "files": [
