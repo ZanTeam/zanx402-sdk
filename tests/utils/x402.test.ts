@@ -79,21 +79,19 @@ describe('x402 utilities', () => {
         x402Version: 2,
         scheme: 'exact',
         network: 'base-sepolia',
-        payload: {
-          signature: '0xdeadbeef',
-          authorization: {
-            from: params.from,
-            to: params.to,
-            value: params.value,
-            validAfter: params.validAfter,
-            validBefore: params.validBefore,
-            nonce: params.nonce,
-          },
+        payload: '0xdeadbeef',
+        authorization: {
+          from: params.from,
+          to: params.to,
+          value: params.value,
+          validAfter: params.validAfter,
+          validBefore: params.validBefore,
+          nonce: params.nonce,
         },
       });
     });
 
-    it('includes chainId when provided', () => {
+    it('includes domain when chainId and tokenAddress provided', () => {
       const params = {
         from: '0x1111111111111111111111111111111111111111',
         to: '0x2222222222222222222222222222222222222222',
@@ -104,14 +102,18 @@ describe('x402 utilities', () => {
         signature: '0xdeadbeef',
         network: 'base-sepolia',
         chainId: 84532,
+        tokenAddress: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
       };
 
       const result = buildPaymentSignaturePayload(params);
 
       expect(result.network).toBe('base-sepolia');
-      expect(result.payload).toBeDefined();
-      const payload = result.payload as { authorization?: unknown };
-      expect(payload.authorization).toBeDefined();
+      expect(result.payload).toBe('0xdeadbeef');
+      expect(result.authorization).toBeDefined();
+      expect(result.domain).toBeDefined();
+      const domain = result.domain as { chainId?: number; verifyingContract?: string };
+      expect(domain.chainId).toBe(84532);
+      expect(domain.verifyingContract).toBe('0x036CbD53842c5426634e7929541eC2318f3dCF7e');
     });
   });
 });

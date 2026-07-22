@@ -1,6 +1,6 @@
-import type { HealthResponse, ProvidersResponse, NetworksResponse, BundleListResponse, X402Capability } from '../types/discovery.js';
+import type { HealthResponse, ProvidersResponse, NetworksResponse, BundleListResponse, X402Capability, AiPaymentNetworksResponse } from '../types/discovery.js';
 import { HttpClient } from '../utils/http.js';
-import { ENDPOINTS } from '../constants.js';
+import { ENDPOINTS, AI_ENDPOINTS } from '../constants.js';
 import { X402Error } from '../errors/index.js';
 
 /**
@@ -47,6 +47,12 @@ export class DiscoveryModule {
   /** Get llms.txt (AI agent discovery) */
   async getLlmsTxt(): Promise<string> {
     const { data } = await this.http.get<string>(ENDPOINTS.LLMS_TXT);
+    return data;
+  }
+
+  /** List AI payment networks (EVM/SVM) */
+  async getAiPaymentNetworks(): Promise<AiPaymentNetworksResponse> {
+    const { data } = await this.http.get<AiPaymentNetworksResponse>(AI_ENDPOINTS.PAYMENT_NETWORKS);
     return data;
   }
 }

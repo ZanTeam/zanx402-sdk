@@ -38,6 +38,8 @@ export interface AiChatData {
 export interface AiChatResponse {
   success: true;
   data: AiChatData;
+  txHash?: string | null;
+  paymentNetwork?: string | null;
   traceId?: string;
 }
 
@@ -45,8 +47,12 @@ export interface AiChatResponse {
 
 export interface AiModelInfo {
   model_name: string;
+  display_name?: string;
   endpoint: string;
-  price: number;
+  input_price_per_token: number;
+  output_price_per_token: number;
+  /** @deprecated use input_price_per_token / output_price_per_token */
+  price?: number;
 }
 
 export interface AiModelListResponse {
@@ -73,46 +79,66 @@ export interface AiCallHistoryParams {
 
 export interface AiCallRecord {
   id: number;
-  model: string;
-  status: string;
-  tokens: number;
-  cost: number;
-  createdAt: string;
+  requestId: string;
+  wallet: string;
+  modelId: string;
+  protocolFamily: string;
+  requestPath: string;
+  httpMethod: string;
+  httpStatus: number;
+  errorCode: string;
+  priceUsdc: number;
+  currency: string;
+  network: string;
+  isRefunded: number;
+  gatewayLatencyMs: number;
+  upstreamLatencyMs: number;
+  upstreamErrorClass: string;
+  inputTokens: number;
+  outputTokens: number;
+  settlementStatus: string;
+  gmtCreate: string;
 }
 
 export interface AiCallHistoryResponse {
-  records: AiCallRecord[];
-  total: number;
-  page: number;
-  size: number;
+  result: string;
+  msg: string;
+  data: {
+    content: AiCallRecord[];
+    totalElements: number;
+    totalPages: number;
+  };
 }
 
 export interface AiCallDetail extends AiCallRecord {
   request: unknown;
   response: unknown;
-  latencyMs: number;
-  paymentNetwork: string;
+  inputPricePerToken: string;
+  outputPricePerToken: string;
   txHash?: string;
 }
 
 // ── Call Stats ───────────────────────────────────────────
 
 export interface AiCallStatsParams {
-  groupBy?: 'model' | 'day' | 'week';
+  groupBy?: 'model' | 'date';
   startTime?: string;
   endTime?: string;
 }
 
 export interface AiCallStatsResponse {
-  stats: AiCallStatEntry[];
+  result: string;
+  msg: string;
+  data: AiCallStatEntry[];
 }
 
 export interface AiCallStatEntry {
   key: string;
   totalCalls: number;
-  totalTokens: number;
-  totalCost: number;
-  avgLatencyMs: number;
+  successCalls: number;
+  totalUsdc: number;
+  refundedUsdc: number;
+  avgGatewayLatencyMs: number;
 }
 
 // ── Payment Required (re-export for convenience) ────────

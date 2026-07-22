@@ -30,7 +30,7 @@ npm install @solana/web3.js @solana/spl-token bs58 tweetnacl
 
 ## 快速示例
 
-### RPC 调用（Credits 预付费）
+### 创建客户端
 
 ```typescript
 import { createX402Client } from '@zan_team/x402';
@@ -41,7 +41,29 @@ const client = await createX402Client({
   autoPayment: true,
   preAuth: true,
 });
+```
 
+### 购买额度
+
+```typescript
+// 查询可购买的套餐
+const { bundles } = await client.listBundles();
+console.log(bundles);  // [{ name: 'default', credits: 1000, price: 1, ... }, ...]
+
+// 查询当前余额
+const balance = await client.getBalance();
+console.log(balance.balance);  // 0
+
+// 购买额度（自动处理 402 → EIP-3009 / Solana SPL 签名 → 链上结算）
+const receipt = await client.purchaseCredits('default');
+console.log(receipt.creditsPurchased);  // 1000
+console.log(receipt.txHash);           // '0x...'
+console.log(receipt.paymentNetwork);   // 'eip155:8453'
+```
+
+### RPC 调用（Credits 预付费）
+
+```typescript
 const block = await client.call('eth', 'mainnet', 'eth_blockNumber');
 console.log(block.result);
 ```
@@ -65,8 +87,8 @@ X402Client
 ├── auth       AuthModule      SIWE/SIWS + JWT 生命周期
 ├── credits    CreditsModule   余额 · 购买 · 用量 · 支付状态
 ├── rpc        RpcModule       JSON-RPC · 批量 · 通用 Provider 转发
-├── ai         AiModule        AI 模型调用 · 按次 x402 支付 · 调用记录
-└── discovery  DiscoveryModule 健康 · Provider · 网络 · 套餐 · AI 模型
+├── ai         AiModule        AI 模型调用 · 滚动结算 · 调用记录 · 统计
+└── discovery  DiscoveryModule 健康 · Provider · 网络 · 套餐 · AI 模型 · 支付网络
 ```
 
 子路径导出：`@zan_team/x402/auth`、`/credits`、`/rpc`、`/ai`。`DiscoveryModule` 通过包根入口导出。
@@ -132,18 +154,21 @@ Client                   Gateway                  Facilitator
   │<── 200 + result ───────│
 ```
 
-### AI（按次付费）
+### AI（滚动结算）
 
 ```
 Client                   Gateway
-  │── POST /ai/{model}  ─>│
-  │<── 402 + PAYMENT-REQUIRED
+  │── POST /ai/{model}  ─>│  [首次调用，无需支付]
+  │<── 200 + AI 响应 ─────│  （按实际 token 用量记账，状态 pending）
+  │                        │
+  │── POST /ai/{model}  ─>│  [后续调用]
+  │<── 402 + PAYMENT-REQUIRED  （结算上次调用的 token 费用）
   │  [签名 EIP-3009 / Solana SPL]
   │── POST /ai/{model} (+ PAYMENT-SIGNATURE) ────>│
-  │<── 200 + AI 响应 ─────│
+  │<── 200 + AI 响应 + txHash ─│
 ```
 
-每次 AI 调用独立付费——无 Credits 余额概念，无 Session 复用。
+AI 采用**滚动结算**模式：首次调用免费，后续每次调用结算上一次的实际 token 费用。按 token 计费（`input_price_per_token` + `output_price_per_token`）。
 
 ## 仓库结构
 

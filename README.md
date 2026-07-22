@@ -30,7 +30,7 @@ npm install @solana/web3.js @solana/spl-token bs58 tweetnacl
 
 ## Quick example
 
-### RPC call (credits-based)
+### Create client
 
 ```typescript
 import { createX402Client } from '@zan_team/x402';
@@ -41,7 +41,29 @@ const client = await createX402Client({
   autoPayment: true,
   preAuth: true,
 });
+```
 
+### Purchase credits
+
+```typescript
+// Query available bundles
+const { bundles } = await client.listBundles();
+console.log(bundles);  // [{ name: 'default', credits: 1000, price: 1, ... }, ...]
+
+// Check current balance
+const balance = await client.getBalance();
+console.log(balance.balance);  // 0
+
+// Purchase credits (triggers 402 → EIP-3009 / Solana SPL signature → settle)
+const receipt = await client.purchaseCredits('default');
+console.log(receipt.creditsPurchased);  // 1000
+console.log(receipt.txHash);           // '0x...'
+console.log(receipt.paymentNetwork);   // 'eip155:8453'
+```
+
+### RPC call (credits-based)
+
+```typescript
 const block = await client.call('eth', 'mainnet', 'eth_blockNumber');
 console.log(block.result);
 ```
@@ -65,8 +87,8 @@ X402Client
 ├── auth       AuthModule      SIWE/SIWS + JWT lifecycle
 ├── credits    CreditsModule   balance · purchase · usage · payment status
 ├── rpc        RpcModule       JSON-RPC · batch · generic provider forward
-├── ai         AiModule        AI model chat · per-call x402 payment · history
-└── discovery  DiscoveryModule health · providers · networks · bundles · AI models
+├── ai         AiModule        AI model chat · rolling settlement · history · stats
+└── discovery  DiscoveryModule health · providers · networks · bundles · AI models · payment networks
 ```
 
 Subpath exports: `@zan_team/x402/auth`, `/credits`, `/rpc`, `/ai`. `DiscoveryModule` via package root.
@@ -132,18 +154,21 @@ Client                   Gateway                  Facilitator
   │<── 200 + result ───────│
 ```
 
-### AI (per-call payment)
+### AI (rolling settlement)
 
 ```
 Client                   Gateway
-  │── POST /ai/{model}  ─>│
-  │<── 402 + PAYMENT-REQUIRED
+  │── POST /ai/{model}  ─>│  [first call, no payment needed]
+  │<── 200 + AI response ─│  (usage recorded as pending)
+  │                        │
+  │── POST /ai/{model}  ─>│  [subsequent call]
+  │<── 402 + PAYMENT-REQUIRED  (settle previous call's token cost)
   │  [sign EIP-3009 / Solana SPL]
   │── POST /ai/{model} (+ PAYMENT-SIGNATURE) ────>│
-  │<── 200 + AI response ─│
+  │<── 200 + AI response + txHash ─│
 ```
 
-Each AI call pays independently — no credits balance, no session reuse.
+AI uses **rolling settlement**: the first call is free; each subsequent call settles the previous call's actual token cost. Pricing is per-token (`input_price_per_token` + `output_price_per_token`).
 
 ## Project structure
 

@@ -39,6 +39,10 @@ export interface BundleDetailInfo {
   credits: number;
   price: number;
   description: string;
+  pricing?: {
+    mainnet?: { usdc: string; credits: number };
+    testnet?: { usdc: string; credits: number };
+  } | null;
 }
 
 export interface X402Capability {
@@ -55,4 +59,19 @@ export interface X402Endpoint {
   method: string;
   description?: string;
   price?: number;
+}
+
+export interface AiPaymentNetworkInfo {
+  network: string;
+  chainType: string;
+  type: string;
+  asset: string;
+  payTo: string;
+}
+
+export interface AiPaymentNetworksResponse {
+  result: string;
+  data: {
+    networks: AiPaymentNetworkInfo[];
+  };
 }

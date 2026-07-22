@@ -39,6 +39,7 @@ export const AI_ENDPOINTS = {
   CHAT: '/ai',
   MODELS: '/api/models',
   DISCOVERY: '/v1/discovery/ai',
+  PAYMENT_NETWORKS: '/v1/discovery/ai/payment-networks',
   CALLS: '/v1/ai/calls',
   CALLS_STATS: '/v1/ai/calls/stats',
 } as const;

@@ -420,7 +420,9 @@ describe('AiModule', () => {
       const mockHttp = createMockHttp();
       const mockAuth = createMockAuth() as unknown as AuthModule;
       const statsResponse = {
-        stats: [{ key: 'claude-opus-4-6', totalCalls: 10, totalTokens: 500, totalCost: 5.0, avgLatencyMs: 1500 }],
+        result: 'OK',
+        msg: 'SUCCESS',
+        data: [{ key: 'claude-opus-4-6', totalCalls: 10, successCalls: 9, totalUsdc: 5.0, refundedUsdc: 0, avgGatewayLatencyMs: 1500 }],
       };
 
       vi.mocked(mockHttp.get).mockResolvedValue({
@@ -433,8 +435,8 @@ describe('AiModule', () => {
       const result = await ai.getCallStats({ groupBy: 'model' });
 
       expect(mockAuth.ensureAuthenticated).toHaveBeenCalled();
-      expect(result.stats).toHaveLength(1);
-      expect(result.stats[0].totalCalls).toBe(10);
+      expect(result.data).toHaveLength(1);
+      expect(result.data[0].totalCalls).toBe(10);
     });
   });
 });
