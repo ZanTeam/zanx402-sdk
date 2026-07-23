@@ -104,6 +104,7 @@ export class X402Client {
     this.credits = new CreditsModule(this.http, this.auth, {
       paymentNetwork: config.paymentNetwork,
       solanaRpcUrl: config.solanaRpcUrl,
+      gatewayUrl,
     });
     this.rpc = new RpcModule(this.http, this.auth);
     this.discovery = new DiscoveryModule(this.http);
@@ -112,6 +113,7 @@ export class X402Client {
       aiTimeout: config.aiTimeout ?? DEFAULT_AI_TIMEOUT,
       paymentNetwork: config.paymentNetwork,
       solanaRpcUrl: config.solanaRpcUrl,
+      gatewayUrl,
     });
   }
 
@@ -163,6 +165,8 @@ export class X402Client {
       resolve = () => res(undefined as unknown as PurchaseSuccess);
       reject = rej;
     });
+    // Prevent unhandled-rejection crashes when no concurrent caller ever awaits this promise.
+    promise.catch(() => {});
     this.purchaseInflight = { promise, resolve, reject };
 
     try {

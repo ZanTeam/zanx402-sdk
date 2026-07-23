@@ -31,6 +31,7 @@ export class AiModule {
   private readonly aiTimeout: number;
   private readonly paymentNetwork?: string;
   private readonly solanaRpcUrl?: string;
+  private readonly gatewayUrl?: string;
 
   constructor(
     http: HttpClient,
@@ -40,6 +41,7 @@ export class AiModule {
       aiTimeout?: number;
       paymentNetwork?: string;
       solanaRpcUrl?: string;
+      gatewayUrl?: string;
     },
   ) {
     this.http = http;
@@ -48,6 +50,7 @@ export class AiModule {
     this.aiTimeout = opts.aiTimeout ?? DEFAULT_AI_TIMEOUT;
     this.paymentNetwork = opts.paymentNetwork;
     this.solanaRpcUrl = opts.solanaRpcUrl;
+    this.gatewayUrl = opts.gatewayUrl;
   }
 
   async chat(
@@ -190,6 +193,8 @@ export class AiModule {
         svmSigner,
         option,
         solanaRpcUrl: this.solanaRpcUrl,
+        gatewayUrl: this.gatewayUrl,
+        fetchFn: this.http.getFetchFn(),
       });
       return encodePaymentSignature(payload);
     }

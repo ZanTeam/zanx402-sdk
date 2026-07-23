@@ -109,6 +109,7 @@ function rpcUrlForChain(chainId: number): string {
     case 1: return 'https://eth.drpc.org';
     case 11155111: return 'https://rpc.sepolia.org';
     case 1672: return 'https://rpc.pharos.xyz';
+    case 688689: return 'https://atlantic.dplabs-internal.com'; // Pharos Atlantic Testnet
     default: return `https://rpc.ankr.com/eth`;
   }
 }

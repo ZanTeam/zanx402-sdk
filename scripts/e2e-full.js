@@ -161,7 +161,7 @@ async function run() {
       return { summary: `credits=${r.creditsPurchased}, txHash=${r.txHash?.slice(0, 16)}...`, response: r };
     } catch (e) {
       if (e.code === 'INSUFFICIENT_FUNDS' || e.code === 'PAYMENT_REJECTED') {
-        return { summary: `skipped (${e.code})` };
+        return { summary: `skipped (${e.code}) — ${e.message}`, response: e.details };
       }
       throw e;
     }
@@ -274,7 +274,7 @@ async function run() {
       return { summary: `tokens=${r.data.usage.total_tokens}, txHash=${r.txHash ?? 'null'}, network=${r.paymentNetwork ?? 'null'}`, response: r };
     } catch (e) {
       if (e.code === 'INSUFFICIENT_FUNDS' || e.code === 'NO_EVM_CREDENTIALS') {
-        return { summary: `skipped (${e.code})` };
+        return { summary: `skipped (${e.code}) — ${e.message}`, response: e.details };
       }
       throw e;
     }

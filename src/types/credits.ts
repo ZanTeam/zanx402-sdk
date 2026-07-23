@@ -68,6 +68,12 @@ export interface PaymentOption {
   /** Token decimals (defaults to 6 for USDC if omitted) */
   decimals?: number;
   description?: string;
+  /** Scheme-specific extension data (e.g. SVM feePayer / memo) */
+  extra?: {
+    feePayer?: string;
+    memo?: string;
+    [key: string]: unknown;
+  };
 }
 
 export interface InsufficientCreditsBody {
