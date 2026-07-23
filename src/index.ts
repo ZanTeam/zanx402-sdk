@@ -4,6 +4,7 @@ export { AuthModule } from './modules/auth.js';
 export { CreditsModule } from './modules/credits.js';
 export { RpcModule } from './modules/rpc.js';
 export { DiscoveryModule } from './modules/discovery.js';
+export { AiModule } from './modules/ai.js';
 
 export {
   X402Error,
@@ -16,6 +17,9 @@ export {
   UpstreamError,
   SessionExpiredError,
   NetworkError,
+  AiModelNotFoundError,
+  AiUpstreamError,
+  AiPaymentRequiredError,
 } from './errors/index.js';
 
 export { HttpClient, assertShape, extractTraceId } from './utils/http.js';
@@ -50,4 +54,6 @@ export {
   DEFAULT_GATEWAY_URL,
   DEFAULT_STATEMENT,
   SIWE_EXPIRY_MS,
+  AI_ENDPOINTS,
+  DEFAULT_AI_TIMEOUT,
 } from './constants.js';

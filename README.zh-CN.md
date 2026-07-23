@@ -6,9 +6,10 @@
 |---|---|
 | 鉴权 | SIWE (EVM) / SIWS (SVM) → JWT 会话，自动续签 |
 | 支付自动化 | 透明 402 → 购额 → 链上签名 → 重试 |
+| AI 模型调用 | 按次 x402 支付 — `client.chat()` 自动付费 |
 | 多链 | EVM 经由 viem；可选 Solana 路径（`@solana/web3.js`） |
 | 传输 | `client.call()` 高级 RPC、`client.fetch()` 标准 HTTP |
-| 发现 | 网络、套餐、x402 能力声明——无需鉴权 |
+| 发现 | 网络、套餐、AI 模型列表、x402 能力声明——无需鉴权 |
 | 打包 | ESM + CJS 双构建，子路径导出，支持 tree-shaking |
 
 **面向 AI Agent 与自主系统** — 统一会话原语、机器可解析的 402 付费质询、发现优先设计，适配动态工具目录与运行时规划。详见 [快速上手](./docs/quickstart.md)。
@@ -29,6 +30,8 @@ npm install @solana/web3.js @solana/spl-token bs58 tweetnacl
 
 ## 快速示例
 
+### 创建客户端
+
 ```typescript
 import { createX402Client } from '@zan_team/x402';
 
@@ -38,9 +41,43 @@ const client = await createX402Client({
   autoPayment: true,
   preAuth: true,
 });
+```
 
+### 购买额度
+
+```typescript
+// 查询可购买的套餐
+const { bundles } = await client.listBundles();
+console.log(bundles);  // [{ name: 'default', credits: 1000, price: 1, ... }, ...]
+
+// 查询当前余额
+const balance = await client.getBalance();
+console.log(balance.balance);  // 0
+
+// 购买额度（自动处理 402 → EIP-3009 / Solana SPL 签名 → 链上结算）
+const receipt = await client.purchaseCredits('default');
+console.log(receipt.creditsPurchased);  // 1000
+console.log(receipt.txHash);           // '0x...'
+console.log(receipt.paymentNetwork);   // 'eip155:8453'
+```
+
+### RPC 调用（Credits 预付费）
+
+```typescript
 const block = await client.call('eth', 'mainnet', 'eth_blockNumber');
 console.log(block.result);
+```
+
+### AI 模型调用（按次付费）
+
+```typescript
+const response = await client.chat('claude-opus-4-6', {
+  messages: [{ role: 'user', content: '什么是 x402 协议？' }],
+  max_tokens: 1024,
+});
+
+console.log(response.data.content);
+console.log(response.data.usage);  // { prompt_tokens, completion_tokens, total_tokens }
 ```
 
 ## 架构
@@ -50,10 +87,11 @@ X402Client
 ├── auth       AuthModule      SIWE/SIWS + JWT 生命周期
 ├── credits    CreditsModule   余额 · 购买 · 用量 · 支付状态
 ├── rpc        RpcModule       JSON-RPC · 批量 · 通用 Provider 转发
-└── discovery  DiscoveryModule 健康 · Provider · 网络 · 套餐 · x402 能力
+├── ai         AiModule        AI 模型调用 · 滚动结算 · 调用记录 · 统计
+└── discovery  DiscoveryModule 健康 · Provider · 网络 · 套餐 · AI 模型 · 支付网络
 ```
 
-子路径导出：`@zan_team/x402/auth`、`/credits`、`/rpc`。`DiscoveryModule` 通过包根入口导出。
+子路径导出：`@zan_team/x402/auth`、`/credits`、`/rpc`、`/ai`。`DiscoveryModule` 通过包根入口导出。
 
 ## 配置
 
@@ -73,6 +111,7 @@ interface X402ClientConfig {
   defaultBundle?: BundleType;   // 默认 'default'
   preAuth?: boolean;            // 创建时预鉴权
   timeout?: number;             // 毫秒，默认 30000
+  aiTimeout?: number;           // 毫秒，默认 120000（AI 调用）
   fetch?: typeof fetch;         // 自定义 fetch
 }
 ```
@@ -92,8 +131,13 @@ interface X402ClientConfig {
 | `ProviderNotFoundError` | 404 | 无匹配的 Provider 路由 |
 | `UpstreamError` | 504 | Provider 故障（`creditRefunded`） |
 | `NetworkError` | — | 传输 / 超时 |
+| `AiModelNotFoundError` | 404 | AI 模型不存在或不支持 |
+| `AiUpstreamError` | 502/504 | AI 上游服务故障 |
+| `AiPaymentRequiredError` | 402 | AI 调用需支付（autoPayment 关闭时） |
 
 ## 自动支付流程
+
+### RPC（Credits 预付费）
 
 ```
 Client                   Gateway                  Facilitator
@@ -110,6 +154,22 @@ Client                   Gateway                  Facilitator
   │<── 200 + result ───────│
 ```
 
+### AI（滚动结算）
+
+```
+Client                   Gateway
+  │── POST /ai/{model}  ─>│  [首次调用，无需支付]
+  │<── 200 + AI 响应 ─────│  （按实际 token 用量记账，状态 pending）
+  │                        │
+  │── POST /ai/{model}  ─>│  [后续调用]
+  │<── 402 + PAYMENT-REQUIRED  （结算上次调用的 token 费用）
+  │  [签名 EIP-3009 / Solana SPL]
+  │── POST /ai/{model} (+ PAYMENT-SIGNATURE) ────>│
+  │<── 200 + AI 响应 + txHash ─│
+```
+
+AI 采用**滚动结算**模式：首次调用免费，后续每次调用结算上一次的实际 token 费用。按 token 计费（`input_price_per_token` + `output_price_per_token`）。
+
 ## 仓库结构
 
 ```
@@ -122,6 +182,7 @@ zanx402-sdk/
 │   │   ├── common.ts             # 配置、枚举
 │   │   ├── auth.ts               # 鉴权请求/响应
 │   │   ├── credits.ts            # 额度、支付、用量
+│   │   ├── ai.ts                 # AI 请求/响应类型
 │   │   ├── discovery.ts          # 发现类响应
 │   │   ├── provider.ts           # JSON-RPC 类型
 │   │   └── index.ts              # 类型桶文件
@@ -129,6 +190,7 @@ zanx402-sdk/
 │   │   ├── auth.ts               # SIWE/SIWS + JWT
 │   │   ├── credits.ts            # 余额、购买、用量
 │   │   ├── rpc.ts                # JSON-RPC + 转发
+│   │   ├── ai.ts                 # AI 模型调用 + 支付
 │   │   └── discovery.ts          # 健康、网络、套餐
 │   ├── errors/
 │   │   └── index.ts              # X402Error 层次

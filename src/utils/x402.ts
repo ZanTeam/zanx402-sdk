@@ -46,6 +46,8 @@ export interface TransferAuthParams {
   network: string;
   chainId?: number;
   tokenAddress?: string;
+  tokenName?: string;
+  tokenVersion?: string;
 }
 
 export function buildPaymentSignaturePayload(params: TransferAuthParams): Record<string, unknown> {
@@ -66,8 +68,8 @@ export function buildPaymentSignaturePayload(params: TransferAuthParams): Record
 
   if (params.chainId != null && params.tokenAddress) {
     result.domain = {
-      name: 'USD Coin',
-      version: '2',
+      name: params.tokenName ?? 'USD Coin',
+      version: params.tokenVersion ?? '2',
       chainId: params.chainId,
       verifyingContract: params.tokenAddress,
     };

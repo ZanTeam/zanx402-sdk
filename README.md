@@ -6,9 +6,10 @@ TypeScript SDK for the **x402 Gateway Platform**. Implements the [x402 protocol]
 |---|---|
 | Authentication | SIWE (EVM) / SIWS (SVM) → JWT session with auto-refresh |
 | Payment automation | Transparent 402 → purchase → on-chain signature → retry |
+| AI model calls | Per-call x402 payment — `client.chat()` with auto-pay |
 | Multi-chain | EVM via viem; optional Solana path (`@solana/web3.js`) |
 | Transport | `client.call()` high-level RPC, `client.fetch()` standard HTTP |
-| Discovery | Networks, bundles, x402 capability — no auth required |
+| Discovery | Networks, bundles, AI models, x402 capability — no auth required |
 | Packaging | ESM + CJS dual build, subpath exports, tree-shakeable |
 
 **For AI agents & autonomous systems** — single session primitive, machine-parseable 402 challenges, discovery-first design for dynamic tool catalogs. See [Quickstart](./docs/quickstart.md) for a step-by-step walkthrough.
@@ -29,6 +30,8 @@ npm install @solana/web3.js @solana/spl-token bs58 tweetnacl
 
 ## Quick example
 
+### Create client
+
 ```typescript
 import { createX402Client } from '@zan_team/x402';
 
@@ -38,9 +41,43 @@ const client = await createX402Client({
   autoPayment: true,
   preAuth: true,
 });
+```
 
+### Purchase credits
+
+```typescript
+// Query available bundles
+const { bundles } = await client.listBundles();
+console.log(bundles);  // [{ name: 'default', credits: 1000, price: 1, ... }, ...]
+
+// Check current balance
+const balance = await client.getBalance();
+console.log(balance.balance);  // 0
+
+// Purchase credits (triggers 402 → EIP-3009 / Solana SPL signature → settle)
+const receipt = await client.purchaseCredits('default');
+console.log(receipt.creditsPurchased);  // 1000
+console.log(receipt.txHash);           // '0x...'
+console.log(receipt.paymentNetwork);   // 'eip155:8453'
+```
+
+### RPC call (credits-based)
+
+```typescript
 const block = await client.call('eth', 'mainnet', 'eth_blockNumber');
 console.log(block.result);
+```
+
+### AI model call (per-call payment)
+
+```typescript
+const response = await client.chat('claude-opus-4-6', {
+  messages: [{ role: 'user', content: 'What is x402?' }],
+  max_tokens: 1024,
+});
+
+console.log(response.data.content);
+console.log(response.data.usage);  // { prompt_tokens, completion_tokens, total_tokens }
 ```
 
 ## Architecture
@@ -50,10 +87,11 @@ X402Client
 ├── auth       AuthModule      SIWE/SIWS + JWT lifecycle
 ├── credits    CreditsModule   balance · purchase · usage · payment status
 ├── rpc        RpcModule       JSON-RPC · batch · generic provider forward
-└── discovery  DiscoveryModule health · providers · networks · bundles · x402 cap
+├── ai         AiModule        AI model chat · rolling settlement · history · stats
+└── discovery  DiscoveryModule health · providers · networks · bundles · AI models · payment networks
 ```
 
-Subpath exports: `@zan_team/x402/auth`, `/credits`, `/rpc`. `DiscoveryModule` via package root.
+Subpath exports: `@zan_team/x402/auth`, `/credits`, `/rpc`, `/ai`. `DiscoveryModule` via package root.
 
 ## Configuration
 
@@ -73,6 +111,7 @@ interface X402ClientConfig {
   defaultBundle?: BundleType;   // default: 'default'
   preAuth?: boolean;            // pre-authenticate on creation
   timeout?: number;             // ms, default: 30000
+  aiTimeout?: number;           // ms, default: 120000 (AI calls)
   fetch?: typeof fetch;         // custom fetch impl
 }
 ```
@@ -92,8 +131,13 @@ All errors extend `X402Error` with typed `code` and optional `statusCode`.
 | `ProviderNotFoundError` | 404 | No matching provider route |
 | `UpstreamError` | 504 | Provider failure (`creditRefunded`) |
 | `NetworkError` | — | Transport / timeout |
+| `AiModelNotFoundError` | 404 | AI model not supported |
+| `AiUpstreamError` | 502/504 | AI upstream provider failure |
+| `AiPaymentRequiredError` | 402 | AI payment needed (autoPayment off) |
 
-## Auto-payment flow
+## Auto-payment flows
+
+### RPC (credits-based)
 
 ```
 Client                   Gateway                  Facilitator
@@ -110,6 +154,22 @@ Client                   Gateway                  Facilitator
   │<── 200 + result ───────│
 ```
 
+### AI (rolling settlement)
+
+```
+Client                   Gateway
+  │── POST /ai/{model}  ─>│  [first call, no payment needed]
+  │<── 200 + AI response ─│  (usage recorded as pending)
+  │                        │
+  │── POST /ai/{model}  ─>│  [subsequent call]
+  │<── 402 + PAYMENT-REQUIRED  (settle previous call's token cost)
+  │  [sign EIP-3009 / Solana SPL]
+  │── POST /ai/{model} (+ PAYMENT-SIGNATURE) ────>│
+  │<── 200 + AI response + txHash ─│
+```
+
+AI uses **rolling settlement**: the first call is free; each subsequent call settles the previous call's actual token cost. Pricing is per-token (`input_price_per_token` + `output_price_per_token`).
+
 ## Project structure
 
 ```
@@ -122,6 +182,7 @@ zanx402-sdk/
 │   │   ├── common.ts             # config, enums
 │   │   ├── auth.ts               # auth request/response
 │   │   ├── credits.ts            # credits, payment, usage
+│   │   ├── ai.ts                 # AI request/response types
 │   │   ├── discovery.ts          # discovery responses
 │   │   ├── provider.ts           # JSON-RPC types
 │   │   └── index.ts              # type barrel
@@ -129,6 +190,7 @@ zanx402-sdk/
 │   │   ├── auth.ts               # SIWE/SIWS + JWT
 │   │   ├── credits.ts            # balance, purchase, usage
 │   │   ├── rpc.ts                # JSON-RPC + forward
+│   │   ├── ai.ts                 # AI model chat + payment
 │   │   └── discovery.ts          # health, networks, bundles
 │   ├── errors/
 │   │   └── index.ts              # X402Error hierarchy

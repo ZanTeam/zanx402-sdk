@@ -80,6 +80,8 @@ export interface X402ClientConfig {
 
   /** Request timeout in milliseconds */
   timeout?: number;
+  /** AI call timeout in milliseconds (default 120_000, LLM inference is slower) */
+  aiTimeout?: number;
   /** Custom fetch implementation (for testing / Node.js polyfills) */
   fetch?: typeof globalThis.fetch;
 }

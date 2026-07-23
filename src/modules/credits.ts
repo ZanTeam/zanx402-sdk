@@ -20,16 +20,18 @@ export class CreditsModule {
   private readonly auth: AuthModule;
   private readonly paymentNetwork?: string;
   private readonly solanaRpcUrl?: string;
+  private readonly gatewayUrl?: string;
 
   constructor(
     http: HttpClient,
     auth: AuthModule,
-    opts?: { paymentNetwork?: string; solanaRpcUrl?: string },
+    opts?: { paymentNetwork?: string; solanaRpcUrl?: string; gatewayUrl?: string },
   ) {
     this.http = http;
     this.auth = auth;
     this.paymentNetwork = opts?.paymentNetwork;
     this.solanaRpcUrl = opts?.solanaRpcUrl;
+    this.gatewayUrl = opts?.gatewayUrl;
   }
 
   private finalizePurchaseSuccess(data: unknown): PurchaseSuccess {
@@ -66,6 +68,8 @@ export class CreditsModule {
       svmSigner,
       option,
       solanaRpcUrl: this.solanaRpcUrl,
+      gatewayUrl: this.gatewayUrl,
+      fetchFn: this.http.getFetchFn(),
     });
     const header = encodePaymentSignature(payload);
     return this.completePurchase(path, header, idempotencyKey);
