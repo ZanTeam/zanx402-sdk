@@ -1,15 +1,16 @@
 import type { Account, Chain, Transport, WalletClient } from 'viem';
-import type { AuthSuccess, AuthSession } from '../types/auth.js';
+import type { AuthSuccess, AuthSession, NonceResponse } from '../types/auth.js';
 import type { ChainType, EvmMessageSigner, SvmSigner } from '../types/common.js';
 import { HttpClient, assertShape } from '../utils/http.js';
-import { buildSiweMessage, extractDomain, generateNonce } from '../utils/siwe.js';
+import { buildSiweMessage } from '../utils/siwe.js';
 import { buildSiwsMessage, signSolanaMessage } from '../utils/siws.js';
-import { ENDPOINTS, JWT_REFRESH_BUFFER_MS, SIWE_EXPIRY_MS, DEFAULT_STATEMENT } from '../constants.js';
-import { AuthenticationError, SessionExpiredError } from '../errors/index.js';
+import { ENDPOINTS, JWT_REFRESH_BUFFER_MS, DEFAULT_STATEMENT } from '../constants.js';
+import { AuthenticationError } from '../errors/index.js';
 
 export class AuthModule {
   private readonly http: HttpClient;
   private readonly gatewayUrl: string;
+  private readonly origin: string;
   private readonly statement: string;
   private session?: AuthSession;
   private wallet?: WalletClient<Transport, Chain, Account>;
@@ -30,9 +31,11 @@ export class AuthModule {
     evmSigner?: EvmMessageSigner,
     svmSigner?: SvmSigner,
     statement?: string,
+    origin?: string,
   ) {
     this.http = http;
     this.gatewayUrl = gatewayUrl;
+    this.origin = origin ?? gatewayUrl;
     this.chainType = chainType;
     this.wallet = wallet;
     this.privateKey = privateKey;
@@ -44,7 +47,6 @@ export class AuthModule {
     }
   }
 
-  /** Authenticate using SIWE (EVM) or SIWS (Solana) and store session JWT */
   async authenticate(): Promise<AuthSuccess> {
     if (this.chainType === 'SVM') {
       return this.authenticateSvm();
@@ -52,7 +54,6 @@ export class AuthModule {
     return this.authenticateEvm();
   }
 
-  /** Ensure we have a valid session, re-authenticating if needed (concurrency-safe). */
   async ensureAuthenticated(): Promise<void> {
     if (!this.session || this.isExpiringSoon()) {
       if (!this.authPromise) {
@@ -87,28 +88,23 @@ export class AuthModule {
     return this.chainType;
   }
 
-  /** @internal CreditsModule only — returns Base58 key, should not be cached. */
   _borrowSvmPrivateKey(): string | undefined {
     if (!this._svmPrivateKey) return undefined;
     return new TextDecoder().decode(this._svmPrivateKey);
   }
 
-  /** @internal CreditsModule only — returns SvmSigner if available. */
   _getSvmSigner(): SvmSigner | undefined {
     return this.svmSigner;
   }
 
-  /** @internal CreditsModule only — returns EVM hex private key for payment signing. */
   _borrowEvmPrivateKey(): `0x${string}` | undefined {
     return this.privateKey;
   }
 
-  /** @internal CreditsModule only — returns WalletClient for EVM payment signing. */
   _getEvmWallet(): WalletClient<Transport, Chain, Account> | undefined {
     return this.wallet;
   }
 
-  /** Inject a session token from an external source (e.g. settlement response). */
   injectSession(token: string, expiresAt: number, wallet?: string): void {
     this.session = {
       token,
@@ -120,7 +116,6 @@ export class AuthModule {
     this.http.setToken(token);
   }
 
-  /** Wipe all private key material from memory. */
   destroy(): void {
     this.privateKey = undefined;
     if (this._svmPrivateKey) {
@@ -132,32 +127,46 @@ export class AuthModule {
     this.clearSession();
   }
 
+  // ── Nonce challenge ─────────────────────────────────────────
+
+  private async fetchNonce(chainId: string): Promise<NonceResponse> {
+    const qs = this.http.buildQueryString({
+      chainType: this.chainType,
+      origin: this.origin,
+      chainId,
+    });
+    const { data, status } = await this.http.get<NonceResponse>(`${ENDPOINTS.AUTH_NONCE}${qs}`);
+    if (status !== 200) {
+      throw new AuthenticationError(
+        `Failed to get auth nonce: status ${status}`,
+        data,
+      );
+    }
+    assertShape<NonceResponse>(data, ['nonce', 'domain', 'uri', 'chainId', 'issuedAt'], 'nonce');
+    return data;
+  }
+
   // ── EVM (SIWE) ──────────────────────────────────────────────
 
   private async authenticateEvm(): Promise<AuthSuccess> {
-    const domain = extractDomain(this.gatewayUrl);
-    const nonce = generateNonce();
+    const chainId = await this.resolveEvmChainId();
+    const challenge = await this.fetchNonce(String(chainId));
 
-    if (this.evmSigner) {
-      return this.authenticateWithEvmSigner(this.evmSigner, domain, nonce);
-    }
-
-    const walletClient = await this.resolveWalletClient();
-    const address = walletClient.account.address;
+    const address = await this.resolveEvmAddress();
 
     const message = buildSiweMessage({
-      domain,
+      domain: challenge.domain,
       address,
-      uri: this.gatewayUrl,
-      nonce,
-      chainId: walletClient.chain?.id ?? 1,
+      uri: challenge.uri,
+      nonce: challenge.nonce,
+      chainId: parseInt(challenge.chainId, 10),
       statement: this.statement,
-      expirationTime: new Date(Date.now() + SIWE_EXPIRY_MS).toISOString(),
+      issuedAt: challenge.issuedAt,
     });
 
     let signature: string;
     try {
-      signature = await walletClient.signMessage({ message });
+      signature = await this.signEvmMessage(message);
     } catch (err) {
       throw new AuthenticationError(
         `Failed to sign SIWE message: ${err instanceof Error ? err.message : String(err)}`,
@@ -168,67 +177,47 @@ export class AuthModule {
     return this.postAuth('EVM', message, signature);
   }
 
-  private async authenticateWithEvmSigner(
-    signer: EvmMessageSigner,
-    domain: string,
-    nonce: string,
-  ): Promise<AuthSuccess> {
-    const chainId = signer.getChainId ? await signer.getChainId() : 1;
-    const message = buildSiweMessage({
-      domain,
-      address: signer.address,
-      uri: this.gatewayUrl,
-      nonce,
-      chainId,
-      statement: this.statement,
-      expirationTime: new Date(Date.now() + SIWE_EXPIRY_MS).toISOString(),
-    });
+  private async resolveEvmChainId(): Promise<number> {
+    if (this.evmSigner?.getChainId) return this.evmSigner.getChainId();
+    const walletClient = await this.resolveWalletClient();
+    return walletClient.chain?.id ?? 1;
+  }
 
-    let signature: string;
-    try {
-      signature = await signer.signMessage({ message });
-    } catch (err) {
-      throw new AuthenticationError(
-        `Failed to sign SIWE message: ${err instanceof Error ? err.message : String(err)}`,
-        err,
-      );
+  private async resolveEvmAddress(): Promise<`0x${string}`> {
+    if (this.evmSigner) return this.evmSigner.address;
+    const walletClient = await this.resolveWalletClient();
+    return walletClient.account.address;
+  }
+
+  private async signEvmMessage(message: string): Promise<string> {
+    if (this.evmSigner) {
+      return this.evmSigner.signMessage({ message });
     }
-
-    return this.postAuth('EVM', message, signature);
+    const walletClient = await this.resolveWalletClient();
+    return walletClient.signMessage({ message });
   }
 
   // ── SVM (SIWS) ──────────────────────────────────────────────
 
   private async authenticateSvm(): Promise<AuthSuccess> {
-    if (this.svmSigner) {
-      return this.authenticateWithSvmSigner(this.svmSigner);
-    }
+    const svmChainId = 'solana:mainnet';
+    const challenge = await this.fetchNonce(svmChainId);
 
-    const svmKey = this._borrowSvmPrivateKey();
-    if (!svmKey) {
-      throw new AuthenticationError(
-        'No svmPrivateKey or svmSigner provided for SVM authentication.',
-      );
-    }
-
-    const { publicKey } = await signSolanaMessage('ping', svmKey);
-    const domain = extractDomain(this.gatewayUrl);
-    const nonce = generateNonce();
+    const publicKey = await this.resolveSvmPublicKey();
 
     const message = buildSiwsMessage({
-      domain,
+      domain: challenge.domain,
       address: publicKey,
-      uri: this.gatewayUrl,
-      nonce,
-      chainId: 'mainnet',
+      uri: challenge.uri,
+      nonce: challenge.nonce,
+      chainId: challenge.chainId,
       statement: this.statement,
-      expirationTime: new Date(Date.now() + SIWE_EXPIRY_MS).toISOString(),
+      issuedAt: challenge.issuedAt,
     });
 
     let signature: string;
     try {
-      const result = await signSolanaMessage(message, svmKey);
-      signature = result.signature;
+      signature = await this.signSvmMessage(message);
     } catch (err) {
       throw new AuthenticationError(
         `Failed to sign SIWS message: ${err instanceof Error ? err.message : String(err)}`,
@@ -239,32 +228,24 @@ export class AuthModule {
     return this.postAuth('SVM', message, signature);
   }
 
-  private async authenticateWithSvmSigner(signer: SvmSigner): Promise<AuthSuccess> {
-    const domain = extractDomain(this.gatewayUrl);
-    const nonce = generateNonce();
-
-    const message = buildSiwsMessage({
-      domain,
-      address: signer.publicKey,
-      uri: this.gatewayUrl,
-      nonce,
-      chainId: 'mainnet',
-      statement: this.statement,
-      expirationTime: new Date(Date.now() + SIWE_EXPIRY_MS).toISOString(),
-    });
-
-    let signature: string;
-    try {
-      const result = await signer.signMessage(message);
-      signature = result.signature;
-    } catch (err) {
-      throw new AuthenticationError(
-        `Failed to sign SIWS message: ${err instanceof Error ? err.message : String(err)}`,
-        err,
-      );
+  private async resolveSvmPublicKey(): Promise<string> {
+    if (this.svmSigner) return this.svmSigner.publicKey;
+    const svmKey = this._borrowSvmPrivateKey();
+    if (!svmKey) {
+      throw new AuthenticationError('No svmPrivateKey or svmSigner provided for SVM authentication.');
     }
+    const { publicKey } = await signSolanaMessage('ping', svmKey);
+    return publicKey;
+  }
 
-    return this.postAuth('SVM', message, signature);
+  private async signSvmMessage(message: string): Promise<string> {
+    if (this.svmSigner) {
+      const result = await this.svmSigner.signMessage(message);
+      return result.signature;
+    }
+    const svmKey = this._borrowSvmPrivateKey()!;
+    const result = await signSolanaMessage(message, svmKey);
+    return result.signature;
   }
 
   // ── Common ──────────────────────────────────────────────────

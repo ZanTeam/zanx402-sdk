@@ -145,7 +145,7 @@ function normalizeOption(opt: PaymentOption & Record<string, unknown>): {
     scheme: (opt.scheme as string) ?? 'exact',
     asset,
     payTo,
-    amount: opt.amount,
+    amount: opt.maxAmountRequired ?? opt.amount,
     decimals: opt.decimals ?? DEFAULT_USDC_DECIMALS,
     feePayer: extra?.feePayer ?? SOLANA_X402_FEE_PAYER,
     memo: extra?.memo,

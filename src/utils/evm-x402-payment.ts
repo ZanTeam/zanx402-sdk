@@ -129,6 +129,7 @@ export async function buildEvmX402PaymentPayload(
 
   const recipient = (option.recipient ?? option.payTo) as string | undefined;
   const tokenAddress = (option.tokenAddress ?? option.asset) as string | undefined;
+  const amount = (option.maxAmountRequired ?? option.amount) as string;
   if (!recipient || !tokenAddress) {
     throw new PaymentRejectedError('EVM payment option missing recipient/tokenAddress');
   }
@@ -158,7 +159,7 @@ export async function buildEvmX402PaymentPayload(
     const message = {
       from: account.address,
       to: recipient as `0x${string}`,
-      value: BigInt(option.amount),
+      value: BigInt(amount),
       validAfter: BigInt(validAfter),
       validBefore: BigInt(validBefore),
       nonce,
@@ -176,7 +177,7 @@ export async function buildEvmX402PaymentPayload(
     const message = {
       from: walletClient.account.address,
       to: recipient as `0x${string}`,
-      value: BigInt(option.amount),
+      value: BigInt(amount),
       validAfter: BigInt(validAfter),
       validBefore: BigInt(validBefore),
       nonce,
@@ -195,7 +196,7 @@ export async function buildEvmX402PaymentPayload(
   return buildPaymentSignaturePayload({
     from: signerAddress,
     to: recipient,
-    value: option.amount,
+    value: amount,
     validAfter,
     validBefore,
     nonce,
