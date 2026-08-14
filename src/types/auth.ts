@@ -1,5 +1,15 @@
 import type { ChainType, Tier } from './common.js';
 
+export interface NonceResponse {
+  nonce: string;
+  domain: string;
+  uri: string;
+  chainType: ChainType;
+  chainId: string;
+  issuedAt: string;
+  expiresIn: number;
+}
+
 export interface AuthRequest {
   chainType: ChainType;
   message: string;

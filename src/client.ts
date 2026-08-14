@@ -99,6 +99,7 @@ export class X402Client {
       config.evmSigner,
       config.svmSigner,
       config.statement,
+      config.origin,
     );
 
     this.credits = new CreditsModule(this.http, this.auth, {

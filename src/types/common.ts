@@ -78,6 +78,9 @@ export interface X402ClientConfig {
   /** SIWX statement text included in auth messages. */
   statement?: string;
 
+  /** Origin for auth nonce request. Defaults to gatewayUrl. */
+  origin?: string;
+
   /** Request timeout in milliseconds */
   timeout?: number;
   /** AI call timeout in milliseconds (default 120_000, LLM inference is slower) */

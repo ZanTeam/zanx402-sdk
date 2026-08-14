@@ -4,6 +4,7 @@ export const DEFAULT_BUNDLE = 'default' as const;
 
 export const ENDPOINTS = {
   AUTH: '/auth',
+  AUTH_NONCE: '/auth/nonce',
   BALANCE: '/credits/balance',
   PURCHASE: '/credits/purchase',
   USAGE: '/credits/usage',
